@@ -102,6 +102,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -306,8 +307,31 @@ fun LockScreen(onUnlock: () -> Unit) {
     }
 
     val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
     val screenWidth = configuration.screenWidthDp.dp
     val screenHeight = configuration.screenHeightDp.dp
+
+    fun resizeFloating(uid: String, delta: Float, corner: Corner) {
+        floatingWidgets = floatingWidgets.map { fw ->
+            if (fw.uid != uid) return@map fw
+            val newScale = (fw.scale + delta).coerceIn(0.7f, 2.5f)
+            val realDelta = newScale - fw.scale
+            val baseW = if (fw.widget.size == WidgetSize.WIDE) 180.dp else 100.dp
+            val baseH = 100.dp
+            val dwPx = with(density) { baseW.toPx() } * realDelta
+            val dhPx = with(density) { baseH.toPx() } * realDelta
+            val (ox, oy) = when (corner) {
+                Corner.BottomEnd   -> 0f to 0f
+                Corner.TopEnd      -> 0f to -dhPx
+                Corner.BottomStart -> -dwPx to 0f
+                Corner.TopStart    -> -dwPx to -dhPx
+            }
+            fw.copy(
+                scale = newScale,
+                offset = Offset(fw.offset.x + ox, fw.offset.y + oy)
+            )
+        }
+    }
 
     val scale by animateFloatAsState(
         targetValue = if (isFloating) 0.7f else 1f,
@@ -525,50 +549,10 @@ fun LockScreen(onUnlock: () -> Unit) {
                     )
 
                     if (isFloating && isSelected) {
-                        ResizeCornerHandle(
-                            corner = Corner.TopStart,
-                            alignment = Alignment.TopStart,
-                            onResize = { delta ->
-                                floatingWidgets = floatingWidgets.map {
-                                    if (it.uid == placed.uid) it.copy(
-                                        scale = (it.scale + delta).coerceIn(0.7f, 2.5f)
-                                    ) else it
-                                }
-                            }
-                        )
-                        ResizeCornerHandle(
-                            corner = Corner.TopEnd,
-                            alignment = Alignment.TopEnd,
-                            onResize = { delta ->
-                                floatingWidgets = floatingWidgets.map {
-                                    if (it.uid == placed.uid) it.copy(
-                                        scale = (it.scale + delta).coerceIn(0.7f, 2.5f)
-                                    ) else it
-                                }
-                            }
-                        )
-                        ResizeCornerHandle(
-                            corner = Corner.BottomStart,
-                            alignment = Alignment.BottomStart,
-                            onResize = { delta ->
-                                floatingWidgets = floatingWidgets.map {
-                                    if (it.uid == placed.uid) it.copy(
-                                        scale = (it.scale + delta).coerceIn(0.7f, 2.5f)
-                                    ) else it
-                                }
-                            }
-                        )
-                        ResizeCornerHandle(
-                            corner = Corner.BottomEnd,
-                            alignment = Alignment.BottomEnd,
-                            onResize = { delta ->
-                                floatingWidgets = floatingWidgets.map {
-                                    if (it.uid == placed.uid) it.copy(
-                                        scale = (it.scale + delta).coerceIn(0.7f, 2.5f)
-                                    ) else it
-                                }
-                            }
-                        )
+                        ResizeCornerHandle(Corner.TopStart,    Alignment.TopStart)    { d -> resizeFloating(placed.uid, d, Corner.TopStart) }
+                        ResizeCornerHandle(Corner.TopEnd,      Alignment.TopEnd)      { d -> resizeFloating(placed.uid, d, Corner.TopEnd) }
+                        ResizeCornerHandle(Corner.BottomStart, Alignment.BottomStart) { d -> resizeFloating(placed.uid, d, Corner.BottomStart) }
+                        ResizeCornerHandle(Corner.BottomEnd,   Alignment.BottomEnd)   { d -> resizeFloating(placed.uid, d, Corner.BottomEnd) }
                     }
 
                     if (isFloating) {
