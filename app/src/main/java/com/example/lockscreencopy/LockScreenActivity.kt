@@ -45,22 +45,32 @@ import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.Contacts
+import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Train
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Button
@@ -215,9 +225,29 @@ val lockWidgetApps = listOf(
         LockWidget("h1", "health", "일일 활동", WidgetSize.SMALL, Icons.Filled.Favorite, Color(0xFF32D74B)),
         LockWidget("h2", "health", "일일 활동", WidgetSize.WIDE,  Icons.Filled.Favorite, Color(0xFF32D74B), "4,350", "76 / 458"),
     )),
+    WidgetApp("wellbeing", "디지털 웰빙", Icons.Filled.MonitorHeart, Color(0xFF32D74B), listOf(
+        LockWidget("dw1", "wellbeing", "사용 시간",  WidgetSize.WIDE, Icons.Filled.MonitorHeart,    Color(0xFF32D74B), "3시간 26분", "사용 시간"),
+        LockWidget("dw2", "wellbeing", "앱 타이머", WidgetSize.WIDE, Icons.Filled.HourglassEmpty, Color(0xFF32D74B), "1시간 45분 남음", "인터넷"),
+    )),
     WidgetApp("reminder", "리마인더", Icons.Filled.CheckCircle, Color(0xFF7C3AED), listOf(
-        LockWidget("r1", "reminder", "카테고리", WidgetSize.SMALL, Icons.Filled.CheckCircle, Color(0xFF7C3AED), "3"),
-        LockWidget("r2", "reminder", "카테고리", WidgetSize.WIDE,  null,                    Color.White,        "숙제 / 운동", "티켓 구매"),
+        LockWidget("r1", "reminder", "카테고리",     WidgetSize.SMALL, Icons.Filled.CheckCircle, Color(0xFF7C3AED), "3"),
+        LockWidget("r2", "reminder", "전체 리마인더", WidgetSize.WIDE,  Icons.Filled.CheckCircle, Color(0xFF7C3AED), "숙제 / 운동", "티켓 구매"),
+    )),
+    WidgetApp("navermap", "네이버지도", Icons.Filled.Map, Color(0xFF03C75A), listOf(
+        LockWidget("nm1", "navermap", "[버스/지하철] 도착정보 목록", WidgetSize.WIDE,  Icons.Filled.DirectionsBus, Color(0xFF03C75A), "정자역 신사", "3분 (12:33)"),
+        LockWidget("nm2", "navermap", "[지하철] 도착정보",          WidgetSize.WIDE,  Icons.Filled.Train,         Color(0xFF03C75A), "정자역", "신사행 3분"),
+        LockWidget("nm3", "navermap", "[대중교통] 집/회사",         WidgetSize.WIDE,  Icons.Filled.Home,          Color(0xFF7C3AED), "1시간 25분", "네이버.아데나루체"),
+        LockWidget("nm4", "navermap", "[버스] 도착정보 B",          WidgetSize.WIDE,  Icons.Filled.DirectionsBus, Color(0xFF32D74B), "네이버.아데나루체", "곧 도착 · 13분"),
+        LockWidget("nm5", "navermap", "[네이버지도] 바로가기",       WidgetSize.WIDE,  Icons.Filled.Search,        Color(0xFF03C75A), "네이버지도", "장소, 버스, 지하철 검색"),
+        LockWidget("nm6", "navermap", "[버스] 도착정보 A",          WidgetSize.SMALL, Icons.Filled.DirectionsBus, Color(0xFF32D74B), "곧 도착", "13분"),
+        LockWidget("nm7", "navermap", "[자동차] 집으로",             WidgetSize.SMALL, Icons.Filled.Home,          Color(0xFF7C3AED), "1시간\n25분", "집으로"),
+        LockWidget("nm8", "navermap", "[자동차] 회사로",             WidgetSize.SMALL, Icons.Filled.Business,      Color(0xFF7C3AED), "34분",       "회사로"),
+        LockWidget("nm9", "navermap", "[자동차] 최근 목적지",        WidgetSize.SMALL, Icons.Filled.LocationOn,    Color(0xFF8E8E93), "광화문역"),
+    )),
+    WidgetApp("ytmusic", "YouTube Music", Icons.Filled.PlayCircle, Color(0xFFFF0000), listOf(
+        LockWidget("ym1", "ytmusic", "최근 재생",    WidgetSize.WIDE,  Icons.Filled.MusicNote, Color.White,    "365", "Charli xcx"),
+        LockWidget("ym2", "ytmusic", "지금 재생 중", WidgetSize.WIDE,  Icons.Filled.PlayArrow, Color.White,    "Highway", "Shaboozey"),
+        LockWidget("ym3", "ytmusic", "턴테이블",     WidgetSize.SMALL, Icons.Filled.PlayArrow, Color.White,    "재생"),
     )),
     WidgetApp("routines", "모드 및 루틴", Icons.Filled.Schedule, Color(0xFF5B5EA6), listOf(
         LockWidget("rt1", "routines", "루틴", WidgetSize.SMALL, Icons.Filled.Schedule, Color(0xFF5B5EA6)),
@@ -395,7 +425,7 @@ fun LockScreen(onUnlock: () -> Unit) {
                     }
                 }
 
-                // 하단 초록 바
+                // 하단 LockStar 바
                 Box(
                     modifier = Modifier
                         .padding(bottom = screenHeight * 0.05f)
@@ -406,11 +436,49 @@ fun LockScreen(onUnlock: () -> Unit) {
                         .pointerInput(isFloating) {
                             if (isFloating) detectTapGestures(onTap = { showShortcutPopup = true })
                         }
-                        .clip(RoundedCornerShape(20.dp))
-                        .border(if (isFloating) 2.dp else 0.dp, Color.LightGray, RoundedCornerShape(20.dp))
-                        .height(50.dp).width(200.dp)
-                        .background(Color.Green)
-                )
+                        .clip(RoundedCornerShape(30.dp))
+                        .border(if (isFloating) 2.dp else 0.dp, Color.LightGray, RoundedCornerShape(30.dp))
+                        .background(Color(0xFF101A4D))
+                        .height(60.dp)
+                        .width(220.dp)
+                        .padding(horizontal = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .height(40.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.White.copy(alpha = 0.10f))
+                                .padding(horizontal = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    "12:45",
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Icon(
+                                    imageVector = Icons.Filled.Lock,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFF4D8D),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            "LockStar",
+                            color = Color.White,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
         }
 
