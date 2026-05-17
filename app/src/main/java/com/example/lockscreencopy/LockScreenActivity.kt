@@ -113,6 +113,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.viewinterop.AndroidView
@@ -142,17 +143,6 @@ class LockScreenActivity : ComponentActivity() {
     private lateinit var appWidgetHost: AppWidgetHost
 
     private val hostedWidgets: SnapshotStateList<HostedAppWidget> = mutableStateListOf()
-
-    private val pickWidgetLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        val id = result.data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
-        if (result.resultCode == Activity.RESULT_OK && id != -1) {
-            bindOrConfigureOrAdd(id)
-        } else if (id != -1) {
-            appWidgetHost.deleteAppWidgetId(id)
-        }
-    }
 
     private val bindWidgetLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -193,7 +183,8 @@ class LockScreenActivity : ComponentActivity() {
                         onUnlock = { unlockDevice() },
                         hostedWidgets = hostedWidgets,
                         appWidgetHost = appWidgetHost,
-                        onPickRealWidget = { launchSystemWidgetPicker() },
+                        appWidgetManager = appWidgetManager,
+                        onRealWidgetSelected = { info -> onProviderSelected(info) },
                         onRemoveHosted = { uid -> removeHosted(uid) },
                     )
                 }
@@ -215,41 +206,26 @@ class LockScreenActivity : ComponentActivity() {
         Toast.makeText(this, "Device unlocked!", Toast.LENGTH_SHORT).show()
     }
 
-    private fun launchSystemWidgetPicker() {
+    private fun onProviderSelected(info: AppWidgetProviderInfo) {
         val appWidgetId = appWidgetHost.allocateAppWidgetId()
-        val pickIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).apply {
+        val bound = try {
+            appWidgetManager.bindAppWidgetIdIfAllowed(appWidgetId, info.provider)
+        } catch (_: Exception) { false }
+
+        if (bound) {
+            configureOrAdd(appWidgetId)
+            return
+        }
+
+        val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-            putParcelableArrayListExtra(
-                AppWidgetManager.EXTRA_CUSTOM_INFO,
-                arrayListOf<AppWidgetProviderInfo>()
-            )
-            putParcelableArrayListExtra(
-                AppWidgetManager.EXTRA_CUSTOM_EXTRAS,
-                arrayListOf<Bundle>()
-            )
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, info.provider)
         }
         try {
-            pickWidgetLauncher.launch(pickIntent)
-        } catch (e: ActivityNotFoundException) {
-            Toast.makeText(this, "위젯 피커를 찾을 수 없습니다", Toast.LENGTH_SHORT).show()
+            bindWidgetLauncher.launch(bindIntent)
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "위젯 바인딩을 처리할 수 없습니다", Toast.LENGTH_SHORT).show()
             appWidgetHost.deleteAppWidgetId(appWidgetId)
-        }
-    }
-
-    private fun bindOrConfigureOrAdd(appWidgetId: Int) {
-        val info = appWidgetManager.getAppWidgetInfo(appWidgetId)
-        if (info == null) {
-            val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-            }
-            try {
-                bindWidgetLauncher.launch(bindIntent)
-            } catch (_: ActivityNotFoundException) {
-                Toast.makeText(this, "위젯 바인딩 실패", Toast.LENGTH_SHORT).show()
-                appWidgetHost.deleteAppWidgetId(appWidgetId)
-            }
-        } else {
-            configureOrAdd(appWidgetId)
         }
     }
 
@@ -440,13 +416,15 @@ fun LockScreen(
     onUnlock: () -> Unit,
     hostedWidgets: SnapshotStateList<HostedAppWidget> = mutableStateListOf(),
     appWidgetHost: AppWidgetHost? = null,
-    onPickRealWidget: () -> Unit = {},
+    appWidgetManager: AppWidgetManager? = null,
+    onRealWidgetSelected: (AppWidgetProviderInfo) -> Unit = {},
     onRemoveHosted: (String) -> Unit = {},
 ) {
     var isFloating by remember { mutableStateOf(false) }
     var showShortcutPopup by remember { mutableStateOf(false) }
     var showAppWidgetSheet by remember { mutableStateOf(false) }
     var showLockWidgetPicker by remember { mutableStateOf(false) }
+    var showRealWidgetPicker by remember { mutableStateOf(false) }
     var addedApps by remember { mutableStateOf(listOf<AppItem>()) }
 
     var slotWidgets by remember { mutableStateOf<List<PlacedWidget>>(emptyList()) }
@@ -853,7 +831,7 @@ fun LockScreen(
                             addTarget= AddTarget.FLOATING
                             showLockWidgetPicker = true
                         }
-                        "real_widget" -> onPickRealWidget()
+                        "real_widget" -> showRealWidgetPicker = true
                         "favorite_app" -> showAppWidgetSheet = true
                         "text" -> {}
                     }
@@ -902,6 +880,18 @@ fun LockScreen(
                 onAppSelected = { app ->
                     if (addedApps.none { it.id == app.id }) addedApps = addedApps + app
                     showAppWidgetSheet = false
+                }
+            )
+        }
+
+        // 실제 시스템 위젯 피커
+        if (showRealWidgetPicker && appWidgetManager != null) {
+            RealWidgetPickerSheet(
+                appWidgetManager = appWidgetManager,
+                onDismiss = { showRealWidgetPicker = false },
+                onSelect = { info ->
+                    showRealWidgetPicker = false
+                    onRealWidgetSelected(info)
                 }
             )
         }
@@ -1276,6 +1266,84 @@ fun WidgetPreviewItem(widget: LockWidget, onClick: () -> Unit) {
             if (widget.size == WidgetSize.SMALL) "1x1" else "2x1",
             color = Color(0xFF8E8E93), fontSize = 11.sp
         )
+    }
+}
+
+// ============================================================
+// 실제 시스템 앱 위젯 피커 (설치된 위젯 목록)
+// ============================================================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RealWidgetPickerSheet(
+    appWidgetManager: AppWidgetManager,
+    onDismiss: () -> Unit,
+    onSelect: (AppWidgetProviderInfo) -> Unit,
+) {
+    val ctx = LocalContext.current
+    val pm = ctx.packageManager
+    val grouped = remember(appWidgetManager) {
+        appWidgetManager.installedProviders
+            .groupBy { it.provider.packageName }
+            .toList()
+            .sortedBy { (pkg, _) ->
+                try {
+                    pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString().lowercase()
+                } catch (_: Exception) { pkg }
+            }
+    }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color(0xFF1C1C1E)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
+            Text(
+                "실제 앱 위젯",
+                fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+            )
+            if (grouped.isEmpty()) {
+                Text(
+                    "설치된 위젯이 없습니다",
+                    color = Color(0xFF8E8E93), fontSize = 14.sp,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+            LazyColumn(modifier = Modifier.fillMaxWidth().height(500.dp)) {
+                grouped.forEach { (pkg, infos) ->
+                    val appLabel = try {
+                        pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+                    } catch (_: Exception) { pkg }
+                    item(key = "header_$pkg") {
+                        Text(
+                            appLabel,
+                            color = Color(0xFF8E8E93), fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                    items(infos, key = { it.provider.flattenToShortString() }) { info ->
+                        val label = try { info.loadLabel(pm).toString() } catch (_: Exception) { info.provider.shortClassName }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(info) }
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(label, color = Color.White, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                            Text(
+                                "${info.minWidth}×${info.minHeight}",
+                                color = Color(0xFF8E8E93), fontSize = 12.sp
+                            )
+                        }
+                        Divider(color = Color.White.copy(alpha = 0.08f), thickness = 0.5.dp,
+                            modifier = Modifier.padding(start = 16.dp))
+                    }
+                }
+            }
+        }
     }
 }
 
