@@ -208,8 +208,17 @@ class LockScreenActivity : ComponentActivity() {
 
     private fun onProviderSelected(info: AppWidgetProviderInfo) {
         val appWidgetId = appWidgetHost.allocateAppWidgetId()
+        val d = resources.displayMetrics.density
+        val minWdp = (info.minWidth / d).toInt().coerceAtLeast(40)
+        val minHdp = (info.minHeight / d).toInt().coerceAtLeast(40)
+        val options = Bundle().apply {
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, minWdp)
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, minHdp)
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, minWdp)
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, minHdp)
+        }
         val bound = try {
-            appWidgetManager.bindAppWidgetIdIfAllowed(appWidgetId, info.provider)
+            appWidgetManager.bindAppWidgetIdIfAllowed(appWidgetId, info.provider, options)
         } catch (_: Exception) { false }
 
         if (bound) {
@@ -220,6 +229,7 @@ class LockScreenActivity : ComponentActivity() {
         val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, info.provider)
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_OPTIONS, options)
         }
         try {
             bindWidgetLauncher.launch(bindIntent)
@@ -251,6 +261,16 @@ class LockScreenActivity : ComponentActivity() {
 
     private fun addHostedWidget(appWidgetId: Int) {
         val info = appWidgetManager.getAppWidgetInfo(appWidgetId) ?: return
+        val d = resources.displayMetrics.density
+        val minWdp = (info.minWidth / d).toInt().coerceAtLeast(40)
+        val minHdp = (info.minHeight / d).toInt().coerceAtLeast(40)
+        val options = Bundle().apply {
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, minWdp)
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, minHdp)
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, minWdp)
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, minHdp)
+        }
+        try { appWidgetManager.updateAppWidgetOptions(appWidgetId, options) } catch (_: Exception) {}
         hostedWidgets.add(
             HostedAppWidget(
                 uid = "hosted_${appWidgetId}_${System.currentTimeMillis()}",
