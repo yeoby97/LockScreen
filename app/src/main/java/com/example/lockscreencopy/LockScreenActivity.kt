@@ -311,7 +311,7 @@ fun LockScreen(onUnlock: () -> Unit) {
     val screenWidth = configuration.screenWidthDp.dp
     val screenHeight = configuration.screenHeightDp.dp
 
-    fun resizeFloating(uid: String, delta: Float, corner: Corner) {
+    fun resizeFloating(uid: String, delta: Float) {
         floatingWidgets = floatingWidgets.map { fw ->
             if (fw.uid != uid) return@map fw
             val newScale = (fw.scale + delta).coerceIn(0.7f, 2.5f)
@@ -320,15 +320,9 @@ fun LockScreen(onUnlock: () -> Unit) {
             val baseH = 100.dp
             val dwPx = with(density) { baseW.toPx() } * realDelta
             val dhPx = with(density) { baseH.toPx() } * realDelta
-            val (ox, oy) = when (corner) {
-                Corner.BottomEnd   -> 0f to 0f
-                Corner.TopEnd      -> 0f to -dhPx
-                Corner.BottomStart -> -dwPx to 0f
-                Corner.TopStart    -> -dwPx to -dhPx
-            }
             fw.copy(
                 scale = newScale,
-                offset = Offset(fw.offset.x + ox, fw.offset.y + oy)
+                offset = Offset(fw.offset.x - dwPx / 2f, fw.offset.y - dhPx / 2f)
             )
         }
     }
@@ -549,10 +543,10 @@ fun LockScreen(onUnlock: () -> Unit) {
                     )
 
                     if (isFloating && isSelected) {
-                        ResizeCornerHandle(Corner.TopStart,    Alignment.TopStart)    { d -> resizeFloating(placed.uid, d, Corner.TopStart) }
-                        ResizeCornerHandle(Corner.TopEnd,      Alignment.TopEnd)      { d -> resizeFloating(placed.uid, d, Corner.TopEnd) }
-                        ResizeCornerHandle(Corner.BottomStart, Alignment.BottomStart) { d -> resizeFloating(placed.uid, d, Corner.BottomStart) }
-                        ResizeCornerHandle(Corner.BottomEnd,   Alignment.BottomEnd)   { d -> resizeFloating(placed.uid, d, Corner.BottomEnd) }
+                        ResizeCornerHandle(Corner.TopStart,    Alignment.TopStart)    { d -> resizeFloating(placed.uid, d) }
+                        ResizeCornerHandle(Corner.TopEnd,      Alignment.TopEnd)      { d -> resizeFloating(placed.uid, d) }
+                        ResizeCornerHandle(Corner.BottomStart, Alignment.BottomStart) { d -> resizeFloating(placed.uid, d) }
+                        ResizeCornerHandle(Corner.BottomEnd,   Alignment.BottomEnd)   { d -> resizeFloating(placed.uid, d) }
                     }
 
                     if (isFloating) {
