@@ -1,11 +1,19 @@
 package com.example.lockscreencopy
 
+import android.app.Activity
 import android.app.KeyguardManager
+import android.appwidget.AppWidgetHost
+import android.appwidget.AppWidgetHostView
+import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProviderInfo
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -87,9 +95,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -104,6 +115,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -126,9 +138,49 @@ import com.example.lockscreencopy.ui.theme.LockScreenCopyTheme
 
 class LockScreenActivity : ComponentActivity() {
     private lateinit var keyguardManager: KeyguardManager
+    private lateinit var appWidgetManager: AppWidgetManager
+    private lateinit var appWidgetHost: AppWidgetHost
+
+    private val hostedWidgets: SnapshotStateList<HostedAppWidget> = mutableStateListOf()
+
+    private val pickWidgetLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val id = result.data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
+        if (result.resultCode == Activity.RESULT_OK && id != -1) {
+            bindOrConfigureOrAdd(id)
+        } else if (id != -1) {
+            appWidgetHost.deleteAppWidgetId(id)
+        }
+    }
+
+    private val bindWidgetLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val id = result.data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
+        if (result.resultCode == Activity.RESULT_OK && id != -1) {
+            configureOrAdd(id)
+        } else if (id != -1) {
+            appWidgetHost.deleteAppWidgetId(id)
+        }
+    }
+
+    private val configureWidgetLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val id = result.data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
+        if (result.resultCode == Activity.RESULT_OK && id != -1) {
+            addHostedWidget(id)
+        } else if (id != -1) {
+            appWidgetHost.deleteAppWidgetId(id)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         keyguardManager = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
+        appWidgetManager = AppWidgetManager.getInstance(this)
+        appWidgetHost = AppWidgetHost(this, HOST_ID)
         setShowWhenLocked(true)
         setTurnScreenOn(true)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
@@ -137,15 +189,119 @@ class LockScreenActivity : ComponentActivity() {
         setContent {
             LockScreenCopyTheme() {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    LockScreen(onUnlock = { unlockDevice() })
+                    LockScreen(
+                        onUnlock = { unlockDevice() },
+                        hostedWidgets = hostedWidgets,
+                        appWidgetHost = appWidgetHost,
+                        onPickRealWidget = { launchSystemWidgetPicker() },
+                        onRemoveHosted = { uid -> removeHosted(uid) },
+                    )
                 }
             }
         }
     }
+
+    override fun onStart() {
+        super.onStart()
+        try { appWidgetHost.startListening() } catch (_: Exception) {}
+    }
+
+    override fun onStop() {
+        super.onStop()
+        try { appWidgetHost.stopListening() } catch (_: Exception) {}
+    }
+
     private fun unlockDevice() {
         Toast.makeText(this, "Device unlocked!", Toast.LENGTH_SHORT).show()
     }
+
+    private fun launchSystemWidgetPicker() {
+        val appWidgetId = appWidgetHost.allocateAppWidgetId()
+        val pickIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).apply {
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            putParcelableArrayListExtra(
+                AppWidgetManager.EXTRA_CUSTOM_INFO,
+                arrayListOf<AppWidgetProviderInfo>()
+            )
+            putParcelableArrayListExtra(
+                AppWidgetManager.EXTRA_CUSTOM_EXTRAS,
+                arrayListOf<Bundle>()
+            )
+        }
+        try {
+            pickWidgetLauncher.launch(pickIntent)
+        } catch (e: ActivityNotFoundException) {
+            Toast.makeText(this, "위젯 피커를 찾을 수 없습니다", Toast.LENGTH_SHORT).show()
+            appWidgetHost.deleteAppWidgetId(appWidgetId)
+        }
+    }
+
+    private fun bindOrConfigureOrAdd(appWidgetId: Int) {
+        val info = appWidgetManager.getAppWidgetInfo(appWidgetId)
+        if (info == null) {
+            val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            }
+            try {
+                bindWidgetLauncher.launch(bindIntent)
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(this, "위젯 바인딩 실패", Toast.LENGTH_SHORT).show()
+                appWidgetHost.deleteAppWidgetId(appWidgetId)
+            }
+        } else {
+            configureOrAdd(appWidgetId)
+        }
+    }
+
+    private fun configureOrAdd(appWidgetId: Int) {
+        val info = appWidgetManager.getAppWidgetInfo(appWidgetId) ?: run {
+            appWidgetHost.deleteAppWidgetId(appWidgetId); return
+        }
+        val configure = info.configure
+        if (configure != null) {
+            val configureIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
+                component = configure
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            }
+            try {
+                configureWidgetLauncher.launch(configureIntent)
+            } catch (_: Exception) {
+                addHostedWidget(appWidgetId)
+            }
+        } else {
+            addHostedWidget(appWidgetId)
+        }
+    }
+
+    private fun addHostedWidget(appWidgetId: Int) {
+        val info = appWidgetManager.getAppWidgetInfo(appWidgetId) ?: return
+        hostedWidgets.add(
+            HostedAppWidget(
+                uid = "hosted_${appWidgetId}_${System.currentTimeMillis()}",
+                appWidgetId = appWidgetId,
+                providerInfo = info,
+                offset = Offset(200f, 600f),
+                scale = 1f,
+            )
+        )
+    }
+
+    private fun removeHosted(uid: String) {
+        val item = hostedWidgets.firstOrNull { it.uid == uid } ?: return
+        appWidgetHost.deleteAppWidgetId(item.appWidgetId)
+        hostedWidgets.remove(item)
+    }
+
+    companion object { const val HOST_ID = 1024 }
 }
+
+data class HostedAppWidget(
+    val uid: String,
+    val appWidgetId: Int,
+    val providerInfo: AppWidgetProviderInfo,
+    val offset: Offset,
+    val scale: Float = 1f,
+)
 
 // ============================================================
 // 데이터 모델
@@ -280,7 +436,13 @@ val defaultAppList = listOf(
 // ============================================================
 
 @Composable
-fun LockScreen(onUnlock: () -> Unit) {
+fun LockScreen(
+    onUnlock: () -> Unit,
+    hostedWidgets: SnapshotStateList<HostedAppWidget> = mutableStateListOf(),
+    appWidgetHost: AppWidgetHost? = null,
+    onPickRealWidget: () -> Unit = {},
+    onRemoveHosted: (String) -> Unit = {},
+) {
     var isFloating by remember { mutableStateOf(false) }
     var showShortcutPopup by remember { mutableStateOf(false) }
     var showAppWidgetSheet by remember { mutableStateOf(false) }
@@ -325,6 +487,20 @@ fun LockScreen(onUnlock: () -> Unit) {
                 offset = Offset(fw.offset.x - dwPx / 2f, fw.offset.y - dhPx / 2f)
             )
         }
+    }
+
+    fun resizeHosted(uid: String, delta: Float) {
+        val idx = hostedWidgets.indexOfFirst { it.uid == uid }
+        if (idx == -1) return
+        val hw = hostedWidgets[idx]
+        val newScale = (hw.scale + delta).coerceIn(0.5f, 3.0f)
+        val realDelta = newScale - hw.scale
+        val dwPx = hw.providerInfo.minWidth * realDelta
+        val dhPx = hw.providerInfo.minHeight * realDelta
+        hostedWidgets[idx] = hw.copy(
+            scale = newScale,
+            offset = Offset(hw.offset.x - dwPx / 2f, hw.offset.y - dhPx / 2f),
+        )
     }
 
     val scale by animateFloatAsState(
@@ -573,6 +749,97 @@ fun LockScreen(onUnlock: () -> Unit) {
                     }
                 }
             }
+
+            // 실제 시스템 앱 위젯 호스팅
+            hostedWidgets.forEach { hosted ->
+                key(hosted.uid) {
+                    val isSelected = selectedFloatingUid == hosted.uid
+                    val baseWidthDp = with(density) { hosted.providerInfo.minWidth.toDp() }
+                    val baseHeightDp = with(density) { hosted.providerInfo.minHeight.toDp() }
+                    Box(
+                        modifier = Modifier
+                            .offset {
+                                IntOffset(
+                                    hosted.offset.x.roundToInt(),
+                                    hosted.offset.y.roundToInt(),
+                                )
+                            }
+                            .width(baseWidthDp * hosted.scale)
+                            .height(baseHeightDp * hosted.scale)
+                            .pointerInput(isFloating, hosted.uid) {
+                                if (isFloating) {
+                                    detectTapGestures(onTap = {
+                                        selectedFloatingUid =
+                                            if (selectedFloatingUid == hosted.uid) null else hosted.uid
+                                    })
+                                }
+                            }
+                            .pointerInput(isFloating, hosted.uid) {
+                                if (isFloating) {
+                                    detectDragGestures { change, drag ->
+                                        change.consume()
+                                        val idx = hostedWidgets.indexOfFirst { it.uid == hosted.uid }
+                                        if (idx != -1) {
+                                            val hw = hostedWidgets[idx]
+                                            hostedWidgets[idx] = hw.copy(offset = hw.offset + drag)
+                                        }
+                                    }
+                                }
+                            }
+                    ) {
+                        appWidgetHost?.let { host ->
+                            AndroidView(
+                                factory = { ctx ->
+                                    host.createView(
+                                        ctx, hosted.appWidgetId, hosted.providerInfo
+                                    ).apply {
+                                        setAppWidget(hosted.appWidgetId, hosted.providerInfo)
+                                    }
+                                },
+                                update = { view ->
+                                    val d = view.resources.displayMetrics.density
+                                    val wDp = (hosted.providerInfo.minWidth / d * hosted.scale).toInt()
+                                    val hDp = (hosted.providerInfo.minHeight / d * hosted.scale).toInt()
+                                    try {
+                                        view.updateAppWidgetSize(Bundle(), wDp, hDp, wDp, hDp)
+                                    } catch (_: Exception) {}
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+
+                        if (isFloating && isSelected) {
+                            ResizeCornerHandle(Corner.TopStart,    Alignment.TopStart)    { d -> resizeHosted(hosted.uid, d) }
+                            ResizeCornerHandle(Corner.TopEnd,      Alignment.TopEnd)      { d -> resizeHosted(hosted.uid, d) }
+                            ResizeCornerHandle(Corner.BottomStart, Alignment.BottomStart) { d -> resizeHosted(hosted.uid, d) }
+                            ResizeCornerHandle(Corner.BottomEnd,   Alignment.BottomEnd)   { d -> resizeHosted(hosted.uid, d) }
+                        }
+
+                        if (isFloating) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = 6.dp, y = (-6).dp)
+                                    .size(22.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFFF453A))
+                                    .clickable {
+                                        if (selectedFloatingUid == hosted.uid) selectedFloatingUid = null
+                                        onRemoveHosted(hosted.uid)
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Close,
+                                    contentDescription = "삭제",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // 항목 선택 팝업
@@ -586,6 +853,7 @@ fun LockScreen(onUnlock: () -> Unit) {
                             addTarget= AddTarget.FLOATING
                             showLockWidgetPicker = true
                         }
+                        "real_widget" -> onPickRealWidget()
                         "favorite_app" -> showAppWidgetSheet = true
                         "text" -> {}
                     }
@@ -1022,7 +1290,8 @@ fun ShortcutPickerDialog(onDismiss: () -> Unit, onSelect: (String) -> Unit) {
             Column(modifier = Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("추가할 항목 선택", fontSize = 18.sp, fontWeight = FontWeight.Bold,
                     color = Color.Black, modifier = Modifier.padding(bottom = 16.dp))
-                Button(onClick = { onSelect("app_widget") }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) { Text("앱 위젯") }
+                Button(onClick = { onSelect("app_widget") }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) { Text("앱 위젯 (샘플)") }
+                Button(onClick = { onSelect("real_widget") }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) { Text("실제 앱 위젯") }
                 Button(onClick = { onSelect("favorite_app") }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) { Text("즐겨찾는 앱") }
                 Button(onClick = { onSelect("text") }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) { Text("글 넣기") }
                 Spacer(modifier = Modifier.height(8.dp))
