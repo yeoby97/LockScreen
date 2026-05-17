@@ -10,6 +10,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,6 +19,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -116,7 +118,8 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import kotlin.math.roundToInt
-import androidx.compose.foundation.gestures.detectTransformGestures
+import kotlin.math.sqrt
+import androidx.compose.ui.graphics.StrokeCap
 import com.example.lockscreencopy.ui.theme.LockScreenCopyTheme
 
 
@@ -285,6 +288,7 @@ fun LockScreen(onUnlock: () -> Unit) {
 
     var slotWidgets by remember { mutableStateOf<List<PlacedWidget>>(emptyList()) }
     var floatingWidgets by remember { mutableStateOf<List<FloatingWidget>>(emptyList()) }
+    var selectedFloatingUid by remember { mutableStateOf<String?>(null) }
     var addTarget by remember { mutableStateOf(AddTarget.SLOT) }
 
 
@@ -297,6 +301,7 @@ fun LockScreen(onUnlock: () -> Unit) {
     BackHandler(enabled = isFloating) {
         clockOffset = savedClockOffset
         greenBoxOffset = Offset.Zero
+        selectedFloatingUid = null
         isFloating = false
     }
 
@@ -371,6 +376,7 @@ fun LockScreen(onUnlock: () -> Unit) {
                             Button(onClick = {
                                 savedClockOffset = clockOffset
                                 greenBoxOffset = Offset.Zero
+                                selectedFloatingUid = null
                                 isFloating = false
                             }) { Text("확인") }
                         }
@@ -483,6 +489,7 @@ fun LockScreen(onUnlock: () -> Unit) {
 
             // 선택위젯 독립 box (inner Box 안에 두어 floating 스케일/위치 변화에 따라 함께 변형)
             floatingWidgets.forEach { placed ->
+                val isSelected = selectedFloatingUid == placed.uid
                 Box(
                     modifier = Modifier
                         .offset {
@@ -495,16 +502,18 @@ fun LockScreen(onUnlock: () -> Unit) {
                         .height(100.dp * placed.scale)
                         .pointerInput(isFloating, placed.uid) {
                             if (isFloating) {
-                                detectTransformGestures { _, pan, zoom, _ ->
+                                detectTapGestures(onTap = {
+                                    selectedFloatingUid =
+                                        if (selectedFloatingUid == placed.uid) null else placed.uid
+                                })
+                            }
+                        }
+                        .pointerInput(isFloating, placed.uid) {
+                            if (isFloating) {
+                                detectDragGestures { change, drag ->
+                                    change.consume()
                                     floatingWidgets = floatingWidgets.map {
-                                        if (it.uid == placed.uid) {
-                                            it.copy(
-                                                offset = it.offset + pan,
-                                                scale = (it.scale * zoom).coerceIn(0.7f, 2.0f)
-                                            )
-                                        } else {
-                                            it
-                                        }
+                                        if (it.uid == placed.uid) it.copy(offset = it.offset + drag) else it
                                     }
                                 }
                             }
@@ -514,6 +523,54 @@ fun LockScreen(onUnlock: () -> Unit) {
                         widget = placed.widget,
                         modifier = Modifier.fillMaxSize()
                     )
+
+                    if (isFloating && isSelected) {
+                        ResizeCornerHandle(
+                            corner = Corner.TopStart,
+                            alignment = Alignment.TopStart,
+                            onResize = { delta ->
+                                floatingWidgets = floatingWidgets.map {
+                                    if (it.uid == placed.uid) it.copy(
+                                        scale = (it.scale + delta).coerceIn(0.7f, 2.5f)
+                                    ) else it
+                                }
+                            }
+                        )
+                        ResizeCornerHandle(
+                            corner = Corner.TopEnd,
+                            alignment = Alignment.TopEnd,
+                            onResize = { delta ->
+                                floatingWidgets = floatingWidgets.map {
+                                    if (it.uid == placed.uid) it.copy(
+                                        scale = (it.scale + delta).coerceIn(0.7f, 2.5f)
+                                    ) else it
+                                }
+                            }
+                        )
+                        ResizeCornerHandle(
+                            corner = Corner.BottomStart,
+                            alignment = Alignment.BottomStart,
+                            onResize = { delta ->
+                                floatingWidgets = floatingWidgets.map {
+                                    if (it.uid == placed.uid) it.copy(
+                                        scale = (it.scale + delta).coerceIn(0.7f, 2.5f)
+                                    ) else it
+                                }
+                            }
+                        )
+                        ResizeCornerHandle(
+                            corner = Corner.BottomEnd,
+                            alignment = Alignment.BottomEnd,
+                            onResize = { delta ->
+                                floatingWidgets = floatingWidgets.map {
+                                    if (it.uid == placed.uid) it.copy(
+                                        scale = (it.scale + delta).coerceIn(0.7f, 2.5f)
+                                    ) else it
+                                }
+                            }
+                        )
+                    }
+
                     if (isFloating) {
                         Box(
                             modifier = Modifier
@@ -523,6 +580,7 @@ fun LockScreen(onUnlock: () -> Unit) {
                                 .clip(CircleShape)
                                 .background(Color(0xFFFF453A))
                                 .clickable {
+                                    if (selectedFloatingUid == placed.uid) selectedFloatingUid = null
                                     floatingWidgets = floatingWidgets.filter { it.uid != placed.uid }
                                 },
                             contentAlignment = Alignment.Center
@@ -600,6 +658,67 @@ fun LockScreen(onUnlock: () -> Unit) {
                     showAppWidgetSheet = false
                 }
             )
+        }
+    }
+}
+
+// ============================================================
+// 플로팅 위젯 크기 조절 코너 핸들
+// ============================================================
+
+enum class Corner { TopStart, TopEnd, BottomStart, BottomEnd }
+
+@Composable
+fun BoxScope.ResizeCornerHandle(
+    corner: Corner,
+    alignment: Alignment,
+    onResize: (Float) -> Unit,
+) {
+    val handleSize = 24.dp
+    Box(
+        modifier = Modifier
+            .align(alignment)
+            .offset(
+                x = if (alignment == Alignment.TopStart || alignment == Alignment.BottomStart) (-handleSize / 2) else (handleSize / 2),
+                y = if (alignment == Alignment.TopStart || alignment == Alignment.TopEnd) (-handleSize / 2) else (handleSize / 2)
+            )
+            .size(handleSize)
+            .pointerInput(corner) {
+                detectDragGestures { change, drag ->
+                    change.consume()
+                    val invSqrt2 = 1f / sqrt(2f)
+                    val projection = when (corner) {
+                        Corner.TopStart    -> (-drag.x - drag.y) * invSqrt2
+                        Corner.TopEnd      -> ( drag.x - drag.y) * invSqrt2
+                        Corner.BottomStart -> (-drag.x + drag.y) * invSqrt2
+                        Corner.BottomEnd   -> ( drag.x + drag.y) * invSqrt2
+                    }
+                    onResize(projection / 200f)
+                }
+            }
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize().padding(4.dp)) {
+            val stroke = 4.dp.toPx()
+            val len = size.minDimension
+            val cap = StrokeCap.Round
+            when (corner) {
+                Corner.TopStart -> {
+                    drawLine(Color.White, Offset(0f, 0f),   Offset(len, 0f), stroke, cap)
+                    drawLine(Color.White, Offset(0f, 0f),   Offset(0f, len), stroke, cap)
+                }
+                Corner.TopEnd -> {
+                    drawLine(Color.White, Offset(len, 0f), Offset(0f, 0f),   stroke, cap)
+                    drawLine(Color.White, Offset(len, 0f), Offset(len, len), stroke, cap)
+                }
+                Corner.BottomStart -> {
+                    drawLine(Color.White, Offset(0f, len), Offset(len, len), stroke, cap)
+                    drawLine(Color.White, Offset(0f, len), Offset(0f, 0f),   stroke, cap)
+                }
+                Corner.BottomEnd -> {
+                    drawLine(Color.White, Offset(len, len), Offset(0f, len), stroke, cap)
+                    drawLine(Color.White, Offset(len, len), Offset(len, 0f), stroke, cap)
+                }
+            }
         }
     }
 }
