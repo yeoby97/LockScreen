@@ -480,60 +480,60 @@ fun LockScreen(onUnlock: () -> Unit) {
                     }
                 }
             }
-        }
 
-        // 선택위젯 독립 box
-        floatingWidgets.forEach { placed ->
-            Box(
-                modifier = Modifier
-                    .offset {
-                        IntOffset(
-                            placed.offset.x.roundToInt(),
-                            placed.offset.y.roundToInt()
-                        )
-                    }
-                    .width((if (placed.widget.size == WidgetSize.WIDE) 180.dp else 100.dp)*placed.scale)
-                    .height(100.dp*placed.scale)
-                    .pointerInput(isFloating, placed.uid) {
-                        if (isFloating) {
-                            detectTransformGestures { _, pan, zoom, _ ->
-                                floatingWidgets = floatingWidgets.map {
-                                    if (it.uid == placed.uid) {
-                                        it.copy(
-                                            offset = it.offset + pan,
-                                            scale = (it.scale * zoom).coerceIn(0.7f, 2.0f)
-                                        )
-                                    } else {
-                                        it
+            // 선택위젯 독립 box (inner Box 안에 두어 floating 스케일/위치 변화에 따라 함께 변형)
+            floatingWidgets.forEach { placed ->
+                Box(
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                placed.offset.x.roundToInt(),
+                                placed.offset.y.roundToInt()
+                            )
+                        }
+                        .width((if (placed.widget.size == WidgetSize.WIDE) 180.dp else 100.dp) * placed.scale)
+                        .height(100.dp * placed.scale)
+                        .pointerInput(isFloating, placed.uid) {
+                            if (isFloating) {
+                                detectTransformGestures { _, pan, zoom, _ ->
+                                    floatingWidgets = floatingWidgets.map {
+                                        if (it.uid == placed.uid) {
+                                            it.copy(
+                                                offset = it.offset + pan,
+                                                scale = (it.scale * zoom).coerceIn(0.7f, 2.0f)
+                                            )
+                                        } else {
+                                            it
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-            ) {
-                WidgetCell(
-                    widget = placed.widget,
-                    modifier = Modifier.fillMaxSize()
-                )
-                if (isFloating) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .offset(x = 6.dp, y = (-6).dp)
-                            .size(22.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFFF453A))
-                            .clickable {
-                                floatingWidgets = floatingWidgets.filter { it.uid != placed.uid }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = "삭제",
-                            tint = Color.White,
-                            modifier = Modifier.size(12.dp)
-                        )
+                ) {
+                    WidgetCell(
+                        widget = placed.widget,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    if (isFloating) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = 6.dp, y = (-6).dp)
+                                .size(22.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFFF453A))
+                                .clickable {
+                                    floatingWidgets = floatingWidgets.filter { it.uid != placed.uid }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = "삭제",
+                                tint = Color.White,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
                     }
                 }
             }
