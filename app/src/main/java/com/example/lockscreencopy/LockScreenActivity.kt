@@ -206,11 +206,33 @@ class LockScreenActivity : ComponentActivity() {
         Toast.makeText(this, "Device unlocked!", Toast.LENGTH_SHORT).show()
     }
 
+    private fun resolveWidgetSizeDp(info: AppWidgetProviderInfo): Pair<Int, Int> {
+        val d = resources.displayMetrics.density
+        // 런처 셀 한 칸 가정치 (Samsung 홈은 가변이지만 70dp가 합리적 기본값)
+        val cellDp = 70
+
+        var wDp = (info.minWidth / d).toInt()
+        var hDp = (info.minHeight / d).toInt()
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            val tcw = info.targetCellWidth
+            val tch = info.targetCellHeight
+            if (tcw > 0) wDp = maxOf(wDp, tcw * cellDp)
+            if (tch > 0) hDp = maxOf(hDp, tch * cellDp)
+        }
+
+        if (wDp <= 0) wDp = (info.minResizeWidth / d).toInt()
+        if (hDp <= 0) hDp = (info.minResizeHeight / d).toInt()
+
+        if (wDp <= 0) wDp = 110
+        if (hDp <= 0) hDp = 110
+
+        return wDp to hDp
+    }
+
     private fun onProviderSelected(info: AppWidgetProviderInfo) {
         val appWidgetId = appWidgetHost.allocateAppWidgetId()
-        val d = resources.displayMetrics.density
-        val minWdp = (info.minWidth / d).toInt().coerceAtLeast(40)
-        val minHdp = (info.minHeight / d).toInt().coerceAtLeast(40)
+        val (minWdp, minHdp) = resolveWidgetSizeDp(info)
         val options = Bundle().apply {
             putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, minWdp)
             putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, minHdp)
@@ -261,9 +283,7 @@ class LockScreenActivity : ComponentActivity() {
 
     private fun addHostedWidget(appWidgetId: Int) {
         val info = appWidgetManager.getAppWidgetInfo(appWidgetId) ?: return
-        val d = resources.displayMetrics.density
-        val minWdp = (info.minWidth / d).toInt().coerceAtLeast(40)
-        val minHdp = (info.minHeight / d).toInt().coerceAtLeast(40)
+        val (minWdp, minHdp) = resolveWidgetSizeDp(info)
         val options = Bundle().apply {
             putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, minWdp)
             putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, minHdp)
@@ -271,11 +291,14 @@ class LockScreenActivity : ComponentActivity() {
             putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, minHdp)
         }
         try { appWidgetManager.updateAppWidgetOptions(appWidgetId, options) } catch (_: Exception) {}
+        val d = resources.displayMetrics.density
         hostedWidgets.add(
             HostedAppWidget(
                 uid = "hosted_${appWidgetId}_${System.currentTimeMillis()}",
                 appWidgetId = appWidgetId,
                 providerInfo = info,
+                widthPx = (minWdp * d).toInt(),
+                heightPx = (minHdp * d).toInt(),
                 offset = Offset(200f, 600f),
                 scale = 1f,
             )
@@ -295,6 +318,8 @@ data class HostedAppWidget(
     val uid: String,
     val appWidgetId: Int,
     val providerInfo: AppWidgetProviderInfo,
+    val widthPx: Int,
+    val heightPx: Int,
     val offset: Offset,
     val scale: Float = 1f,
 )
@@ -493,8 +518,8 @@ fun LockScreen(
         val hw = hostedWidgets[idx]
         val newScale = (hw.scale + delta).coerceIn(0.5f, 3.0f)
         val realDelta = newScale - hw.scale
-        val dwPx = hw.providerInfo.minWidth * realDelta
-        val dhPx = hw.providerInfo.minHeight * realDelta
+        val dwPx = hw.widthPx * realDelta
+        val dhPx = hw.heightPx * realDelta
         hostedWidgets[idx] = hw.copy(
             scale = newScale,
             offset = Offset(hw.offset.x - dwPx / 2f, hw.offset.y - dhPx / 2f),
@@ -752,8 +777,8 @@ fun LockScreen(
             hostedWidgets.forEach { hosted ->
                 key(hosted.uid) {
                     val isSelected = selectedFloatingUid == hosted.uid
-                    val baseWidthDp = with(density) { hosted.providerInfo.minWidth.toDp() }
-                    val baseHeightDp = with(density) { hosted.providerInfo.minHeight.toDp() }
+                    val baseWidthDp = with(density) { hosted.widthPx.toDp() }
+                    val baseHeightDp = with(density) { hosted.heightPx.toDp() }
                     Box(
                         modifier = Modifier
                             .offset {
@@ -796,8 +821,8 @@ fun LockScreen(
                                 },
                                 update = { view ->
                                     val d = view.resources.displayMetrics.density
-                                    val wDp = (hosted.providerInfo.minWidth / d * hosted.scale).toInt()
-                                    val hDp = (hosted.providerInfo.minHeight / d * hosted.scale).toInt()
+                                    val wDp = (hosted.widthPx / d * hosted.scale).toInt()
+                                    val hDp = (hosted.heightPx / d * hosted.scale).toInt()
                                     try {
                                         view.updateAppWidgetSize(Bundle(), wDp, hDp, wDp, hDp)
                                     } catch (_: Exception) {}
