@@ -48,11 +48,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.Article
 import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Business
@@ -71,6 +73,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Phone
@@ -206,11 +209,33 @@ class LockScreenActivity : ComponentActivity() {
         Toast.makeText(this, "Device unlocked!", Toast.LENGTH_SHORT).show()
     }
 
+    private fun resolveWidgetSizeDp(info: AppWidgetProviderInfo): Pair<Int, Int> {
+        val d = resources.displayMetrics.density
+        // 런처 셀 한 칸 가정치 (Samsung 홈은 가변이지만 70dp가 합리적 기본값)
+        val cellDp = 70
+
+        var wDp = (info.minWidth / d).toInt()
+        var hDp = (info.minHeight / d).toInt()
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            val tcw = info.targetCellWidth
+            val tch = info.targetCellHeight
+            if (tcw > 0) wDp = maxOf(wDp, tcw * cellDp)
+            if (tch > 0) hDp = maxOf(hDp, tch * cellDp)
+        }
+
+        if (wDp <= 0) wDp = (info.minResizeWidth / d).toInt()
+        if (hDp <= 0) hDp = (info.minResizeHeight / d).toInt()
+
+        if (wDp <= 0) wDp = 110
+        if (hDp <= 0) hDp = 110
+
+        return wDp to hDp
+    }
+
     private fun onProviderSelected(info: AppWidgetProviderInfo) {
         val appWidgetId = appWidgetHost.allocateAppWidgetId()
-        val d = resources.displayMetrics.density
-        val minWdp = (info.minWidth / d).toInt().coerceAtLeast(40)
-        val minHdp = (info.minHeight / d).toInt().coerceAtLeast(40)
+        val (minWdp, minHdp) = resolveWidgetSizeDp(info)
         val options = Bundle().apply {
             putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, minWdp)
             putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, minHdp)
@@ -261,9 +286,7 @@ class LockScreenActivity : ComponentActivity() {
 
     private fun addHostedWidget(appWidgetId: Int) {
         val info = appWidgetManager.getAppWidgetInfo(appWidgetId) ?: return
-        val d = resources.displayMetrics.density
-        val minWdp = (info.minWidth / d).toInt().coerceAtLeast(40)
-        val minHdp = (info.minHeight / d).toInt().coerceAtLeast(40)
+        val (minWdp, minHdp) = resolveWidgetSizeDp(info)
         val options = Bundle().apply {
             putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, minWdp)
             putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, minHdp)
@@ -271,13 +294,17 @@ class LockScreenActivity : ComponentActivity() {
             putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, minHdp)
         }
         try { appWidgetManager.updateAppWidgetOptions(appWidgetId, options) } catch (_: Exception) {}
+        val d = resources.displayMetrics.density
         hostedWidgets.add(
             HostedAppWidget(
                 uid = "hosted_${appWidgetId}_${System.currentTimeMillis()}",
                 appWidgetId = appWidgetId,
                 providerInfo = info,
+                widthPx = (minWdp * d).toInt(),
+                heightPx = (minHdp * d).toInt(),
                 offset = Offset(200f, 600f),
-                scale = 1f,
+                scaleX = 1f,
+                scaleY = 1f,
             )
         )
     }
@@ -295,8 +322,11 @@ data class HostedAppWidget(
     val uid: String,
     val appWidgetId: Int,
     val providerInfo: AppWidgetProviderInfo,
+    val widthPx: Int,
+    val heightPx: Int,
     val offset: Offset,
-    val scale: Float = 1f,
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
 )
 
 // ============================================================
@@ -325,7 +355,8 @@ data class FloatingWidget(
     val uid: String,
     val widget: LockWidget,
     val offset: Offset,
-    val scale: Float = 1f
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
 )
 
 enum class AddTarget{
@@ -409,6 +440,35 @@ val lockWidgetApps = listOf(
         LockWidget("rt1", "routines", "루틴", WidgetSize.SMALL, Icons.Filled.Schedule, Color(0xFF5B5EA6)),
         LockWidget("rt2", "routines", "루틴", WidgetSize.WIDE,  Icons.Filled.Schedule, Color(0xFF5B5EA6), "회의"),
     )),
+    WidgetApp("interpreter", "통역", Icons.Filled.Language, Color(0xFF4A90E2), listOf(
+        LockWidget("int1", "interpreter", "대화 통역", WidgetSize.SMALL, Icons.Filled.Language, Color.White, "통역"),
+        LockWidget("int2", "interpreter", "실시간 통역", WidgetSize.WIDE, Icons.Filled.Language, Color.White, "실시간 통역", "대화 모드")
+    )),
+
+    WidgetApp("camera", "카메라", Icons.Filled.CameraAlt, Color(0xFF424242), listOf(
+        LockWidget("cam1", "camera", "카메라 실행", WidgetSize.SMALL, Icons.Filled.CameraAlt, Color.White, "카메라"),
+        LockWidget("cam2", "camera", "빠른 촬영", WidgetSize.WIDE, Icons.Filled.CameraAlt, Color.White, "카메라", "빠른 촬영")
+    )),
+
+    WidgetApp("voice_recorder", "음성 녹음", Icons.Filled.Mic, Color(0xFFE53935), listOf(
+        LockWidget("rec1", "voice_recorder", "녹음 시작", WidgetSize.SMALL, Icons.Filled.Mic, Color.White, "녹음"),
+        LockWidget("rec2", "voice_recorder", "음성 녹음", WidgetSize.WIDE, Icons.Filled.Mic, Color.White, "음성 녹음", "탭하여 녹음 시작")
+    )),
+
+    WidgetApp("samsung_news", "삼성 뉴스", Icons.Filled.Article, Color(0xFF1E88E5), listOf(
+        LockWidget("news1", "samsung_news", "주요 뉴스", WidgetSize.SMALL, Icons.Filled.Article, Color.White, "뉴스"),
+        LockWidget("news2", "samsung_news", "오늘의 뉴스", WidgetSize.WIDE, Icons.Filled.Article, Color.White, "오늘의 뉴스", "주요 소식 보기")
+    )),
+
+    WidgetApp("device_care", "디바이스 케어", Icons.Filled.Settings, Color(0xFF00A86B), listOf(
+        LockWidget("care1", "device_care", "기기 상태", WidgetSize.SMALL, Icons.Filled.Settings, Color.White, "좋음"),
+        LockWidget("care2", "device_care", "디바이스 케어", WidgetSize.WIDE, Icons.Filled.Settings, Color.White, "기기 상태 좋음", "배터리 · 저장공간")
+    )),
+
+    WidgetApp("gallery", "갤러리", Icons.Filled.PhotoLibrary, Color(0xFFE91E63), listOf(
+        LockWidget("gal1", "gallery", "최근 사진", WidgetSize.SMALL, Icons.Filled.PhotoLibrary, Color.White, "사진"),
+        LockWidget("gal2", "gallery", "갤러리", WidgetSize.WIDE, Icons.Filled.PhotoLibrary, Color.White, "최근 사진", "갤러리 바로가기")
+    )),
 )
 
 val defaultAppList = listOf(
@@ -471,33 +531,54 @@ fun LockScreen(
     val screenWidth = configuration.screenWidthDp.dp
     val screenHeight = configuration.screenHeightDp.dp
 
-    fun resizeFloating(uid: String, delta: Float) {
+    fun resizeFloating(uid: String, deltaX: Float, deltaY: Float, anchorX: Float = 0.5f, anchorY: Float = 0.5f) {
         floatingWidgets = floatingWidgets.map { fw ->
             if (fw.uid != uid) return@map fw
-            val newScale = (fw.scale + delta).coerceIn(0.7f, 2.5f)
-            val realDelta = newScale - fw.scale
             val baseW = if (fw.widget.size == WidgetSize.WIDE) 180.dp else 100.dp
             val baseH = 100.dp
-            val dwPx = with(density) { baseW.toPx() } * realDelta
-            val dhPx = with(density) { baseH.toPx() } * realDelta
+            val minScaleX = (80f / baseW.value).coerceIn(0.3f, 1f)
+            val minScaleY = (80f / baseH.value).coerceIn(0.3f, 1f)
+            val newScaleX = (fw.scaleX + deltaX).coerceIn(minScaleX, 2.5f)
+            val newScaleY = (fw.scaleY + deltaY).coerceIn(minScaleY, 2.5f)
+            val realDeltaX = newScaleX - fw.scaleX
+            val realDeltaY = newScaleY - fw.scaleY
+            val dwPx = with(density) { baseW.toPx() } * realDeltaX
+            val dhPx = with(density) { baseH.toPx() } * realDeltaY
             fw.copy(
-                scale = newScale,
-                offset = Offset(fw.offset.x - dwPx / 2f, fw.offset.y - dhPx / 2f)
+                scaleX = newScaleX,
+                scaleY = newScaleY,
+                offset = Offset(fw.offset.x - dwPx * anchorX, fw.offset.y - dhPx * anchorY)
             )
         }
     }
 
-    fun resizeHosted(uid: String, delta: Float) {
+    fun resizeHosted(uid: String, deltaX: Float, deltaY: Float, anchorX: Float = 0.5f, anchorY: Float = 0.5f) {
         val idx = hostedWidgets.indexOfFirst { it.uid == uid }
         if (idx == -1) return
         val hw = hostedWidgets[idx]
-        val newScale = (hw.scale + delta).coerceIn(0.5f, 3.0f)
-        val realDelta = newScale - hw.scale
-        val dwPx = hw.providerInfo.minWidth * realDelta
-        val dhPx = hw.providerInfo.minHeight * realDelta
+        val baseWDp = with(density) { hw.widthPx.toDp() }
+        val baseHDp = with(density) { hw.heightPx.toDp() }
+        // 최소 크기: 80dp 고정 (위젯이 충분히 작아질 수 있도록)
+        val minScaleX = (80f / baseWDp.value).coerceIn(0.2f, 1f)
+        val minScaleY = (80f / baseHDp.value).coerceIn(0.2f, 1f)
+        // maxResizeWidth/Height (API 31+, fallback: no limit → 3.0f)
+        val d = density.density
+        val maxScaleX = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            if (hw.providerInfo.maxResizeWidth > 0) (hw.providerInfo.maxResizeWidth / d) / baseWDp.value else 3.0f
+        } else 3.0f
+        val maxScaleY = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            if (hw.providerInfo.maxResizeHeight > 0) (hw.providerInfo.maxResizeHeight / d) / baseHDp.value else 3.0f
+        } else 3.0f
+        val newScaleX = (hw.scaleX + deltaX).coerceIn(minScaleX, maxScaleX.coerceAtLeast(minScaleX))
+        val newScaleY = (hw.scaleY + deltaY).coerceIn(minScaleY, maxScaleY.coerceAtLeast(minScaleY))
+        val realDeltaX = newScaleX - hw.scaleX
+        val realDeltaY = newScaleY - hw.scaleY
+        val dwPx = hw.widthPx * realDeltaX
+        val dhPx = hw.heightPx * realDeltaY
         hostedWidgets[idx] = hw.copy(
-            scale = newScale,
-            offset = Offset(hw.offset.x - dwPx / 2f, hw.offset.y - dhPx / 2f),
+            scaleX = newScaleX,
+            scaleY = newScaleY,
+            offset = Offset(hw.offset.x - dwPx * anchorX, hw.offset.y - dhPx * anchorY),
         )
     }
 
@@ -563,7 +644,10 @@ fun LockScreen(
                 // 상단
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     if (isFloating) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
                             Button(onClick = {}) { Text("배경화면") }
                             Button(onClick = {
                                 savedClockOffset = clockOffset
@@ -581,7 +665,12 @@ fun LockScreen(
                     // 시계 + 날짜 + 위젯 슬롯
                     Column(
                         modifier = Modifier
-                            .offset { IntOffset(clockOffset.x.roundToInt(), clockOffset.y.roundToInt()) }
+                            .offset {
+                                IntOffset(
+                                    clockOffset.x.roundToInt(),
+                                    clockOffset.y.roundToInt()
+                                )
+                            }
                             .pointerInput(isFloating) {
                                 if (isFloating) detectDragGestures { change, drag ->
                                     change.consume(); clockOffset += drag
@@ -609,7 +698,9 @@ fun LockScreen(
                             isFloating = isFloating,
                             slotSize = slotSize,
                             slotGap = slotGap,
-                            onRemove = { uid -> slotWidgets = slotWidgets.filter { it.uid != uid } },
+                            onRemove = { uid ->
+                                slotWidgets = slotWidgets.filter { it.uid != uid }
+                            },
                             onAdd = {
                                 addTarget = AddTarget.SLOT
                                 showLockWidgetPicker = true
@@ -624,57 +715,73 @@ fun LockScreen(
                 }
 
                 // 하단 LockStar 바
-                Box(
-                    modifier = Modifier
-                        .padding(bottom = screenHeight * 0.05f)
-                        .offset { IntOffset(greenBoxOffset.x.roundToInt(), greenBoxOffset.y.roundToInt()) }
-                        .pointerInput(isFloating) {
-                            if (isFloating) detectDragGestures { c, d -> c.consume(); greenBoxOffset += d }
-                        }
-                        .pointerInput(isFloating) {
-                            if (isFloating) detectTapGestures(onTap = { showShortcutPopup = true })
-                        }
-                        .clip(RoundedCornerShape(30.dp))
-                        .border(if (isFloating) 2.dp else 0.dp, Color.LightGray, RoundedCornerShape(30.dp))
-                        .background(Color(0xFF101A4D))
-                        .height(60.dp)
-                        .width(220.dp)
-                        .padding(horizontal = 10.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .height(40.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color.White.copy(alpha = 0.10f))
-                                .padding(horizontal = 8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(
-                                    "12:45",
-                                    color = Color.White,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Icon(
-                                    imageVector = Icons.Filled.Lock,
-                                    contentDescription = null,
-                                    tint = Color(0xFFFF4D8D),
-                                    modifier = Modifier.size(14.dp)
+                if (isFloating) {
+                    Box(
+                        modifier = Modifier
+                            .padding(bottom = screenHeight * 0.05f)
+                            .offset {
+                                IntOffset(
+                                    greenBoxOffset.x.roundToInt(),
+                                    greenBoxOffset.y.roundToInt()
                                 )
                             }
+                            .pointerInput(isFloating) {
+                                if (isFloating) detectDragGestures { c, d -> c.consume(); greenBoxOffset += d }
+                            }
+                            .pointerInput(isFloating) {
+                                if (isFloating) detectTapGestures(onTap = {
+                                    showShortcutPopup = true
+                                })
+                            }
+                            .clip(RoundedCornerShape(30.dp))
+                            .border(
+                                if (isFloating) 2.dp else 0.dp,
+                                Color.LightGray,
+                                RoundedCornerShape(30.dp)
+                            )
+                            .background(Color(0xFF101A4D))
+                            .height(60.dp)
+                            .width(220.dp)
+                            .padding(horizontal = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .height(40.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.White.copy(alpha = 0.10f))
+                                    .padding(horizontal = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        "12:45",
+                                        color = Color.White,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Filled.Lock,
+                                        contentDescription = null,
+                                        tint = Color(0xFFFF4D8D),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                            Text(
+                                "LockStar",
+                                color = Color.White,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
-                        Text(
-                            "LockStar",
-                            color = Color.White,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold
-                        )
                     }
                 }
             }
@@ -690,8 +797,8 @@ fun LockScreen(
                                 placed.offset.y.roundToInt()
                             )
                         }
-                        .width((if (placed.widget.size == WidgetSize.WIDE) 180.dp else 100.dp) * placed.scale)
-                        .height(100.dp * placed.scale)
+                        .width((if (placed.widget.size == WidgetSize.WIDE) 180.dp else 100.dp) * placed.scaleX)
+                        .height(100.dp * placed.scaleY)
                         .pointerInput(isFloating, placed.uid) {
                             if (isFloating) {
                                 detectTapGestures(onTap = {
@@ -717,10 +824,14 @@ fun LockScreen(
                     )
 
                     if (isFloating && isSelected) {
-                        ResizeCornerHandle(Corner.TopStart,    Alignment.TopStart)    { d -> resizeFloating(placed.uid, d) }
-                        ResizeCornerHandle(Corner.TopEnd,      Alignment.TopEnd)      { d -> resizeFloating(placed.uid, d) }
-                        ResizeCornerHandle(Corner.BottomStart, Alignment.BottomStart) { d -> resizeFloating(placed.uid, d) }
-                        ResizeCornerHandle(Corner.BottomEnd,   Alignment.BottomEnd)   { d -> resizeFloating(placed.uid, d) }
+                        ResizeCornerHandle(Corner.TopStart,    Alignment.TopStart)    { dx, dy -> resizeFloating(placed.uid, dx, dy, 1f, 1f) }
+                        ResizeCornerHandle(Corner.TopEnd,      Alignment.TopEnd)      { dx, dy -> resizeFloating(placed.uid, dx, dy, 0f, 1f) }
+                        ResizeCornerHandle(Corner.BottomStart, Alignment.BottomStart) { dx, dy -> resizeFloating(placed.uid, dx, dy, 1f, 0f) }
+                        ResizeCornerHandle(Corner.BottomEnd,   Alignment.BottomEnd)   { dx, dy -> resizeFloating(placed.uid, dx, dy, 0f, 0f) }
+                        ResizeEdgeHandle(Edge.Start,  Alignment.CenterStart)  { dx, _ -> resizeFloating(placed.uid, dx, 0f, 1f, 0.5f) }
+                        ResizeEdgeHandle(Edge.End,    Alignment.CenterEnd)    { dx, _ -> resizeFloating(placed.uid, dx, 0f, 0f, 0.5f) }
+                        ResizeEdgeHandle(Edge.Top,    Alignment.TopCenter)    { _, dy -> resizeFloating(placed.uid, 0f, dy, 0.5f, 1f) }
+                        ResizeEdgeHandle(Edge.Bottom, Alignment.BottomCenter)  { _, dy -> resizeFloating(placed.uid, 0f, dy, 0.5f, 0f) }
                     }
 
                     if (isFloating) {
@@ -752,8 +863,8 @@ fun LockScreen(
             hostedWidgets.forEach { hosted ->
                 key(hosted.uid) {
                     val isSelected = selectedFloatingUid == hosted.uid
-                    val baseWidthDp = with(density) { hosted.providerInfo.minWidth.toDp() }
-                    val baseHeightDp = with(density) { hosted.providerInfo.minHeight.toDp() }
+                    val baseWidthDp = with(density) { hosted.widthPx.toDp() }
+                    val baseHeightDp = with(density) { hosted.heightPx.toDp() }
                     Box(
                         modifier = Modifier
                             .offset {
@@ -762,8 +873,8 @@ fun LockScreen(
                                     hosted.offset.y.roundToInt(),
                                 )
                             }
-                            .width(baseWidthDp * hosted.scale)
-                            .height(baseHeightDp * hosted.scale)
+                            .width(baseWidthDp * hosted.scaleX)
+                            .height(baseHeightDp * hosted.scaleY)
                             .pointerInput(isFloating, hosted.uid) {
                                 if (isFloating) {
                                     detectTapGestures(onTap = {
@@ -796,8 +907,8 @@ fun LockScreen(
                                 },
                                 update = { view ->
                                     val d = view.resources.displayMetrics.density
-                                    val wDp = (hosted.providerInfo.minWidth / d * hosted.scale).toInt()
-                                    val hDp = (hosted.providerInfo.minHeight / d * hosted.scale).toInt()
+                                    val wDp = (hosted.widthPx / d * hosted.scaleX).toInt()
+                                    val hDp = (hosted.heightPx / d * hosted.scaleY).toInt()
                                     try {
                                         view.updateAppWidgetSize(Bundle(), wDp, hDp, wDp, hDp)
                                     } catch (_: Exception) {}
@@ -806,11 +917,33 @@ fun LockScreen(
                             )
                         }
 
+                        // 편집상태일 때 실제 위젯 클릭 막는 투명 레이어
+                        if (isFloating) {
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .pointerInput(hosted.uid) {
+                                        detectDragGestures { change, drag ->
+                                            change.consume()
+                                            val idx = hostedWidgets.indexOfFirst { it.uid == hosted.uid }
+                                            if (idx != -1) {
+                                                val hw = hostedWidgets[idx]
+                                                hostedWidgets[idx] = hw.copy(offset = hw.offset + drag)
+                                            }
+                                        }
+                                    }
+                            )
+                        }
+
                         if (isFloating && isSelected) {
-                            ResizeCornerHandle(Corner.TopStart,    Alignment.TopStart)    { d -> resizeHosted(hosted.uid, d) }
-                            ResizeCornerHandle(Corner.TopEnd,      Alignment.TopEnd)      { d -> resizeHosted(hosted.uid, d) }
-                            ResizeCornerHandle(Corner.BottomStart, Alignment.BottomStart) { d -> resizeHosted(hosted.uid, d) }
-                            ResizeCornerHandle(Corner.BottomEnd,   Alignment.BottomEnd)   { d -> resizeHosted(hosted.uid, d) }
+                            ResizeCornerHandle(Corner.TopStart,    Alignment.TopStart)    { dx, dy -> resizeHosted(hosted.uid, dx, dy, 1f, 1f) }
+                            ResizeCornerHandle(Corner.TopEnd,      Alignment.TopEnd)      { dx, dy -> resizeHosted(hosted.uid, dx, dy, 0f, 1f) }
+                            ResizeCornerHandle(Corner.BottomStart, Alignment.BottomStart) { dx, dy -> resizeHosted(hosted.uid, dx, dy, 1f, 0f) }
+                            ResizeCornerHandle(Corner.BottomEnd,   Alignment.BottomEnd)   { dx, dy -> resizeHosted(hosted.uid, dx, dy, 0f, 0f) }
+                            ResizeEdgeHandle(Edge.Start,  Alignment.CenterStart)  { dx, _ -> resizeHosted(hosted.uid, dx, 0f, 1f, 0.5f) }
+                            ResizeEdgeHandle(Edge.End,    Alignment.CenterEnd)    { dx, _ -> resizeHosted(hosted.uid, dx, 0f, 0f, 0.5f) }
+                            ResizeEdgeHandle(Edge.Top,    Alignment.TopCenter)    { _, dy -> resizeHosted(hosted.uid, 0f, dy, 0.5f, 1f) }
+                            ResizeEdgeHandle(Edge.Bottom, Alignment.BottomCenter)  { _, dy -> resizeHosted(hosted.uid, 0f, dy, 0.5f, 0f) }
                         }
 
                         if (isFloating) {
@@ -923,12 +1056,13 @@ fun LockScreen(
 // ============================================================
 
 enum class Corner { TopStart, TopEnd, BottomStart, BottomEnd }
+enum class Edge { Start, End, Top, Bottom }
 
 @Composable
 fun BoxScope.ResizeCornerHandle(
     corner: Corner,
     alignment: Alignment,
-    onResize: (Float) -> Unit,
+    onResize: (Float, Float) -> Unit,
 ) {
     val handleSize = 24.dp
     Box(
@@ -942,14 +1076,13 @@ fun BoxScope.ResizeCornerHandle(
             .pointerInput(corner) {
                 detectDragGestures { change, drag ->
                     change.consume()
-                    val invSqrt2 = 1f / sqrt(2f)
-                    val projection = when (corner) {
-                        Corner.TopStart    -> (-drag.x - drag.y) * invSqrt2
-                        Corner.TopEnd      -> ( drag.x - drag.y) * invSqrt2
-                        Corner.BottomStart -> (-drag.x + drag.y) * invSqrt2
-                        Corner.BottomEnd   -> ( drag.x + drag.y) * invSqrt2
+                    val (dx, dy) = when (corner) {
+                        Corner.TopStart    -> -drag.x to -drag.y
+                        Corner.TopEnd      ->  drag.x to -drag.y
+                        Corner.BottomStart -> -drag.x to  drag.y
+                        Corner.BottomEnd   ->  drag.x to  drag.y
                     }
-                    onResize(projection / 200f)
+                    onResize(dx / 400f, dy / 400f)
                 }
             }
     ) {
@@ -977,6 +1110,37 @@ fun BoxScope.ResizeCornerHandle(
             }
         }
     }
+}
+
+@Composable
+fun BoxScope.ResizeEdgeHandle(
+    edge: Edge,
+    alignment: Alignment,
+    onResize: (Float, Float) -> Unit,
+) {
+    val handleThickness = 20.dp
+    val handleLength = 40.dp
+    Box(
+        modifier = Modifier
+            .align(alignment)
+            .then(
+                when (edge) {
+                    Edge.Start, Edge.End -> Modifier.width(handleThickness).height(handleLength)
+                    Edge.Top, Edge.Bottom -> Modifier.width(handleLength).height(handleThickness)
+                }
+            )
+            .pointerInput(edge) {
+                detectDragGestures { change, drag ->
+                    change.consume()
+                    when (edge) {
+                        Edge.Start  -> onResize(-drag.x / 400f, 0f)
+                        Edge.End    -> onResize( drag.x / 400f, 0f)
+                        Edge.Top    -> onResize(0f, -drag.y / 400f)
+                        Edge.Bottom -> onResize(0f,  drag.y / 400f)
+                    }
+                }
+            }
+    )
 }
 
 // ============================================================
