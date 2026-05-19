@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -51,6 +52,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.lockscreencopy.R
 import com.example.lockscreencopy.model.AddTarget
 import com.example.lockscreencopy.model.AppItem
@@ -90,6 +92,9 @@ fun LockScreen(
     var showLockWidgetPicker by remember { mutableStateOf(false) }
     var showRealWidgetPicker by remember { mutableStateOf(false) }
     var addedApps by remember { mutableStateOf(listOf<AppItem>()) }
+    var leftShortcutApp by remember { mutableStateOf<AppItem?>(null) }
+    var rightShortcutApp by remember { mutableStateOf<AppItem?>(null) }
+    var shortcutEditSide by remember { mutableStateOf<BottomShortcutSide?>(null) }
 
     var slotWidgets by remember { mutableStateOf<List<PlacedWidget>>(emptyList()) }
     var floatingWidgets by remember { mutableStateOf<List<FloatingWidget>>(emptyList()) }
@@ -244,6 +249,14 @@ fun LockScreen(
                         LockStarBar()
                     }
                 }
+
+                BottomShortcutRow(
+                    leftApp = leftShortcutApp,
+                    rightApp = rightShortcutApp,
+                    isFloating = isFloating,
+                    onLeftTap = { if (isFloating) shortcutEditSide = BottomShortcutSide.LEFT },
+                    onRightTap = { if (isFloating) shortcutEditSide = BottomShortcutSide.RIGHT },
+                )
             }
 
             floatingWidgets.forEach { placed ->
@@ -338,13 +351,22 @@ fun LockScreen(
             )
         }
 
-        if (showAppWidgetSheet) {
+        if (showAppWidgetSheet || shortcutEditSide != null) {
             AppWidgetBottomSheet(
                 apps = defaultAppList,
-                onDismiss = { showAppWidgetSheet = false },
-                onAppSelected = { app ->
-                    if (addedApps.none { it.id == app.id }) addedApps = addedApps + app
+                onDismiss = {
                     showAppWidgetSheet = false
+                    shortcutEditSide = null
+                },
+                onAppSelected = { app ->
+                    val selectedSide = shortcutEditSide
+                    if (selectedSide != null) {
+                        if (selectedSide == BottomShortcutSide.LEFT) leftShortcutApp = app else rightShortcutApp = app
+                    } else if (addedApps.none { it.id == app.id }) {
+                        addedApps = addedApps + app
+                    }
+                    showAppWidgetSheet = false
+                    shortcutEditSide = null
                 },
             )
         }
@@ -380,5 +402,61 @@ private fun EditModeTopBar(visible: Boolean, onConfirm: () -> Unit) {
     ) {
         Button(onClick = {}) { Text("배경화면") }
         Button(onClick = onConfirm) { Text("확인") }
+    }
+}
+
+private enum class BottomShortcutSide { LEFT, RIGHT }
+
+@Composable
+private fun BottomShortcutRow(
+    leftApp: AppItem?,
+    rightApp: AppItem?,
+    isFloating: Boolean,
+    onLeftTap: () -> Unit,
+    onRightTap: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BottomShortcutButton(app = leftApp, isFloating = isFloating, onTap = onLeftTap)
+        BottomShortcutButton(app = rightApp, isFloating = isFloating, onTap = onRightTap)
+    }
+}
+
+@Composable
+private fun BottomShortcutButton(app: AppItem?, isFloating: Boolean, onTap: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .pointerInput(isFloating) { detectTapGestures(onTap = { onTap() }) }
+            .padding(horizontal = 8.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(Color.White.copy(alpha = 0.26f))
+                .border(
+                    width = if (isFloating) 1.5.dp else 0.dp,
+                    color = Color.White.copy(alpha = 0.7f),
+                    shape = RoundedCornerShape(18.dp),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (app != null) {
+                Icon(app.icon, contentDescription = app.name, tint = app.tint, modifier = Modifier.size(28.dp))
+            } else {
+                Text("+", color = Color.White, fontSize = 22.sp)
+            }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = app?.name ?: if (isFloating) "설정" else "",
+            color = Color.White,
+            fontSize = 10.sp,
+            maxLines = 1,
+        )
     }
 }
