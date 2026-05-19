@@ -75,6 +75,7 @@ import com.example.lockscreencopy.ui.widget.FavoriteAppsDisplay
 import com.example.lockscreencopy.ui.widget.FloatingWidgetItem
 import com.example.lockscreencopy.ui.widget.HostedWidgetItem
 import com.example.lockscreencopy.ui.widget.LockStarBar
+import com.example.lockscreencopy.ui.widget.ResizeHandles
 import com.example.lockscreencopy.ui.widget.WidgetSlotRow
 import com.example.lockscreencopy.ui.theme.LockScreenCopyTheme
 import kotlinx.coroutines.TimeoutCancellationException
@@ -125,11 +126,14 @@ fun LockScreen(
     var clockOffset by remember { mutableStateOf(Offset.Zero) }
     var greenBoxOffset by remember { mutableStateOf(Offset.Zero) }
     var savedClockOffset by remember { mutableStateOf(Offset.Zero) }
+    var clockScale by remember { mutableStateOf(1f) }
+    var savedClockScale by remember { mutableStateOf(1f) }
     var favoriteAppsOffset by remember { mutableStateOf(Offset.Zero) }
     var savedFavoriteAppsOffset by remember { mutableStateOf(Offset.Zero) }
 
     BackHandler(enabled = isFloating) {
         clockOffset = savedClockOffset
+        clockScale = savedClockScale
         favoriteAppsOffset = savedFavoriteAppsOffset
         greenBoxOffset = Offset.Zero
         selectedFloatingUid = null
@@ -215,6 +219,7 @@ fun LockScreen(
                         visible = isFloating,
                         onConfirm = {
                             savedClockOffset = clockOffset
+                            savedClockScale = clockScale
                             savedFavoriteAppsOffset = favoriteAppsOffset
                             greenBoxOffset = Offset.Zero
                             selectedFloatingUid = null
@@ -234,7 +239,28 @@ fun LockScreen(
                             },
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        ClockHeader()
+                        Box(
+                            modifier = Modifier
+                                .then(
+                                    if (isFloating) Modifier
+                                        .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
+                                        .padding(8.dp)
+                                    else Modifier,
+                                ),
+                        ) {
+                            ClockHeader(
+                                modifier = Modifier.graphicsLayer {
+                                    scaleX = clockScale; scaleY = clockScale
+                                    transformOrigin = TransformOrigin(0.5f, 0.5f)
+                                },
+                            )
+                            if (isFloating) {
+                                ResizeHandles { dx, dy, _, _ ->
+                                    val delta = (dx + dy) / 2f
+                                    clockScale = (clockScale + delta).coerceIn(0.5f, 2.5f)
+                                }
+                            }
+                        }
                         Spacer(modifier = Modifier.height(16.dp))
                         WidgetSlotRow(
                             placedWidgets = slotWidgets,
@@ -308,11 +334,15 @@ fun LockScreen(
                         .then(favPad)
                         .offset { IntOffset(favoriteAppsOffset.x.roundToInt(), favoriteAppsOffset.y.roundToInt()) }
                         .then(
-                            if (isFloating) Modifier.pointerInput(Unit) {
-                                detectDragGestures { change, drag ->
-                                    change.consume(); favoriteAppsOffset += drag
+                            if (isFloating) Modifier
+                                .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
+                                .padding(6.dp)
+                                .pointerInput(Unit) {
+                                    detectDragGestures { change, drag ->
+                                        change.consume(); favoriteAppsOffset += drag
+                                    }
                                 }
-                            } else Modifier,
+                            else Modifier,
                         ),
                 ) {
                     FavoriteAppsDisplay(favorites = favoriteApps, layout = favoriteAppsLayout)
