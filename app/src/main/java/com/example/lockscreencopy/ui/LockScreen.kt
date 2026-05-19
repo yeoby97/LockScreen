@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -54,17 +55,22 @@ import androidx.compose.ui.unit.dp
 import com.example.lockscreencopy.R
 import com.example.lockscreencopy.model.AddTarget
 import com.example.lockscreencopy.model.AppItem
+import com.example.lockscreencopy.model.BottomShortcut
 import com.example.lockscreencopy.model.FloatingWidget
 import com.example.lockscreencopy.model.HostedAppWidget
 import com.example.lockscreencopy.model.PlacedWidget
 import com.example.lockscreencopy.model.WidgetSize
 import com.example.lockscreencopy.data.defaultAppList
+import com.example.lockscreencopy.data.handleSystemAction
+import com.example.lockscreencopy.data.launchAppShortcut
 import com.example.lockscreencopy.ui.picker.AppWidgetBottomSheet
+import com.example.lockscreencopy.ui.picker.BottomShortcutPickerSheet
 import com.example.lockscreencopy.ui.picker.LockWidgetPickerSheet
 import com.example.lockscreencopy.ui.picker.RealWidgetPickerSheet
 import com.example.lockscreencopy.ui.picker.ShortcutChoice
 import com.example.lockscreencopy.ui.picker.ShortcutPickerDialog
 import com.example.lockscreencopy.ui.widget.AddedAppsRow
+import com.example.lockscreencopy.ui.widget.BottomShortcutButton
 import com.example.lockscreencopy.ui.widget.ClockHeader
 import com.example.lockscreencopy.ui.widget.FloatingWidgetItem
 import com.example.lockscreencopy.ui.widget.HostedWidgetItem
@@ -75,6 +81,8 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import kotlin.math.roundToInt
 
+private enum class ShortcutSide { LEFT, RIGHT }
+
 @Composable
 fun LockScreen(
     onUnlock: () -> Unit,
@@ -84,12 +92,24 @@ fun LockScreen(
     onRealWidgetSelected: (AppWidgetProviderInfo) -> Unit = {},
     onRemoveHosted: (String) -> Unit = {},
 ) {
+    val context = LocalContext.current
     var isFloating by remember { mutableStateOf(false) }
     var showShortcutPopup by remember { mutableStateOf(false) }
     var showAppWidgetSheet by remember { mutableStateOf(false) }
     var showLockWidgetPicker by remember { mutableStateOf(false) }
     var showRealWidgetPicker by remember { mutableStateOf(false) }
     var addedApps by remember { mutableStateOf(listOf<AppItem>()) }
+
+    var leftShortcut by remember { mutableStateOf<BottomShortcut?>(null) }
+    var rightShortcut by remember { mutableStateOf<BottomShortcut?>(null) }
+    var pickingShortcutSide by remember { mutableStateOf<ShortcutSide?>(null) }
+
+    fun activateShortcut(shortcut: BottomShortcut) {
+        when (shortcut) {
+            is BottomShortcut.System -> handleSystemAction(context, shortcut.action)
+            is BottomShortcut.App -> launchAppShortcut(context, shortcut)
+        }
+    }
 
     var slotWidgets by remember { mutableStateOf<List<PlacedWidget>>(emptyList()) }
     var floatingWidgets by remember { mutableStateOf<List<FloatingWidget>>(emptyList()) }
@@ -267,6 +287,35 @@ fun LockScreen(
                 )
             }
 
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 24.dp, bottom = screenHeight * 0.04f),
+            ) {
+                BottomShortcutButton(
+                    shortcut = leftShortcut,
+                    isEditing = isFloating,
+                    onClick = {
+                        if (isFloating) pickingShortcutSide = ShortcutSide.LEFT
+                        else leftShortcut?.let { activateShortcut(it) }
+                    },
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 24.dp, bottom = screenHeight * 0.04f),
+            ) {
+                BottomShortcutButton(
+                    shortcut = rightShortcut,
+                    isEditing = isFloating,
+                    onClick = {
+                        if (isFloating) pickingShortcutSide = ShortcutSide.RIGHT
+                        else rightShortcut?.let { activateShortcut(it) }
+                    },
+                )
+            }
+
             hostedWidgets.forEach { hosted ->
                 key(hosted.uid) {
                     HostedWidgetItem(
@@ -345,6 +394,20 @@ fun LockScreen(
                 onAppSelected = { app ->
                     if (addedApps.none { it.id == app.id }) addedApps = addedApps + app
                     showAppWidgetSheet = false
+                },
+            )
+        }
+
+        pickingShortcutSide?.let { side ->
+            BottomShortcutPickerSheet(
+                onDismiss = { pickingShortcutSide = null },
+                onClear = {
+                    if (side == ShortcutSide.LEFT) leftShortcut = null else rightShortcut = null
+                    pickingShortcutSide = null
+                },
+                onSelected = { sc ->
+                    if (side == ShortcutSide.LEFT) leftShortcut = sc else rightShortcut = sc
+                    pickingShortcutSide = null
                 },
             )
         }

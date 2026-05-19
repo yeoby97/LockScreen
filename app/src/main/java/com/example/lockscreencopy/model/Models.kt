@@ -1,6 +1,7 @@
 package com.example.lockscreencopy.model
 
 import android.appwidget.AppWidgetProviderInfo
+import android.graphics.drawable.Drawable
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -47,6 +48,31 @@ data class AppItem(
     val icon: ImageVector,
     val tint: Color,
 )
+
+enum class SystemAction {
+    SOUND, FLASHLIGHT, AIRPLANE, MOBILE_DATA, POWER_SAVING,
+    DARK_MODE, DO_NOT_DISTURB, QR_SCAN, LOCATION,
+}
+
+sealed class BottomShortcut {
+    abstract val id: String
+    abstract val label: String
+
+    data class System(
+        override val id: String,
+        override val label: String,
+        val action: SystemAction,
+        val icon: ImageVector,
+        val tint: Color = Color.White,
+    ) : BottomShortcut()
+
+    data class App(
+        override val id: String,
+        override val label: String,
+        val packageName: String,
+        val drawable: Drawable? = null,
+    ) : BottomShortcut()
+}
 
 data class HostedAppWidget(
     val uid: String,
