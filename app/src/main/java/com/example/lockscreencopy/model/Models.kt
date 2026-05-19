@@ -10,6 +10,8 @@ enum class WidgetSize { SMALL, WIDE }
 
 enum class AddTarget { SLOT, FLOATING }
 
+enum class FavoriteAppsLayout { BOTTOM_LEFT, LEFT_VERTICAL, BOTTOM_RIGHT }
+
 data class LockWidget(
     val id: String,
     val appId: String,
