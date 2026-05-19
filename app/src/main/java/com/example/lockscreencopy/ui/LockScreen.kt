@@ -269,12 +269,8 @@ fun LockScreen(
                     ) {
                         Box(
                             modifier = Modifier
-                                .then(
-                                    if (isFloating) Modifier
-                                        .border(1.dp, Color.White.copy(alpha = 0.7f * editAlpha), RoundedCornerShape(12.dp))
-                                        .padding(8.dp)
-                                    else Modifier,
-                                ),
+                                .border(1.dp, Color.White.copy(alpha = 0.7f * editAlpha), RoundedCornerShape(12.dp))
+                                .padding(8.dp),
                         ) {
                             ClockHeader(scale = clockScale)
                             if (isFloating) {
@@ -548,15 +544,11 @@ private fun clockCompensation(
 
 @Composable
 private fun EditModeTopBar(visible: Boolean, alpha: Float = 1f, onConfirm: () -> Unit) {
-    if (!visible) {
-        Spacer(modifier = Modifier.height(48.dp))
-        return
-    }
     Row(
         modifier = Modifier.fillMaxWidth().graphicsLayer { this.alpha = alpha },
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Button(onClick = {}) { Text("배경화면") }
-        Button(onClick = onConfirm) { Text("확인") }
+        Button(onClick = {}, enabled = visible) { Text("배경화면") }
+        Button(onClick = onConfirm, enabled = visible) { Text("확인") }
     }
 }
