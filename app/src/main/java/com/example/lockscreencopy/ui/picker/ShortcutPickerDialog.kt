@@ -25,6 +25,8 @@ enum class ShortcutChoice { AppWidget, RealWidget, FavoriteApp, Text }
 fun ShortcutPickerDialog(
     onDismiss: () -> Unit,
     onSelect: (ShortcutChoice) -> Unit,
+    includeFavoriteApp: Boolean = true,
+    includeText: Boolean = true,
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(shape = RoundedCornerShape(20.dp), color = Color.White, shadowElevation = 8.dp) {
@@ -44,14 +46,18 @@ fun ShortcutPickerDialog(
                     onClick = { onSelect(ShortcutChoice.RealWidget) },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                 ) { Text("실제 앱 위젯") }
-                Button(
-                    onClick = { onSelect(ShortcutChoice.FavoriteApp) },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                ) { Text("즐겨찾는 앱") }
-                Button(
-                    onClick = { onSelect(ShortcutChoice.Text) },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                ) { Text("글 넣기") }
+                if (includeFavoriteApp) {
+                    Button(
+                        onClick = { onSelect(ShortcutChoice.FavoriteApp) },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    ) { Text("즐겨찾는 앱") }
+                }
+                if (includeText) {
+                    Button(
+                        onClick = { onSelect(ShortcutChoice.Text) },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    ) { Text("글 넣기") }
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 TextButton(onClick = onDismiss) { Text("취소") }
             }
