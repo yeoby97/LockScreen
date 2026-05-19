@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -53,27 +54,35 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.example.lockscreencopy.R
 import com.example.lockscreencopy.model.AddTarget
-import com.example.lockscreencopy.model.AppItem
+import com.example.lockscreencopy.model.BottomShortcut
+import com.example.lockscreencopy.model.FavoriteAppsLayout
 import com.example.lockscreencopy.model.FloatingWidget
 import com.example.lockscreencopy.model.HostedAppWidget
 import com.example.lockscreencopy.model.PlacedWidget
 import com.example.lockscreencopy.model.WidgetSize
-import com.example.lockscreencopy.data.defaultAppList
-import com.example.lockscreencopy.ui.picker.AppWidgetBottomSheet
+import com.example.lockscreencopy.data.handleSystemAction
+import com.example.lockscreencopy.data.launchAppShortcut
+import com.example.lockscreencopy.ui.picker.BottomShortcutPickerSheet
+import com.example.lockscreencopy.ui.picker.FavoriteAppsPickerScreen
+import com.example.lockscreencopy.ui.picker.FavoriteAppsSettingsSheet
 import com.example.lockscreencopy.ui.picker.LockWidgetPickerSheet
 import com.example.lockscreencopy.ui.picker.RealWidgetPickerSheet
 import com.example.lockscreencopy.ui.picker.ShortcutChoice
 import com.example.lockscreencopy.ui.picker.ShortcutPickerDialog
-import com.example.lockscreencopy.ui.widget.AddedAppsRow
+import com.example.lockscreencopy.ui.widget.BottomShortcutButton
 import com.example.lockscreencopy.ui.widget.ClockHeader
+import com.example.lockscreencopy.ui.widget.FavoriteAppsDisplay
 import com.example.lockscreencopy.ui.widget.FloatingWidgetItem
 import com.example.lockscreencopy.ui.widget.HostedWidgetItem
 import com.example.lockscreencopy.ui.widget.LockStarBar
+import com.example.lockscreencopy.ui.widget.ResizeHandles
 import com.example.lockscreencopy.ui.widget.WidgetSlotRow
 import com.example.lockscreencopy.ui.theme.LockScreenCopyTheme
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import kotlin.math.roundToInt
+
+private enum class ShortcutSide { LEFT, RIGHT }
 
 @Composable
 fun LockScreen(
@@ -84,12 +93,28 @@ fun LockScreen(
     onRealWidgetSelected: (AppWidgetProviderInfo) -> Unit = {},
     onRemoveHosted: (String) -> Unit = {},
 ) {
+    val context = LocalContext.current
     var isFloating by remember { mutableStateOf(false) }
     var showShortcutPopup by remember { mutableStateOf(false) }
-    var showAppWidgetSheet by remember { mutableStateOf(false) }
     var showLockWidgetPicker by remember { mutableStateOf(false) }
     var showRealWidgetPicker by remember { mutableStateOf(false) }
-    var addedApps by remember { mutableStateOf(listOf<AppItem>()) }
+
+    var favoriteApps by remember { mutableStateOf(listOf<BottomShortcut>()) }
+    var favoriteAppsEnabled by remember { mutableStateOf(true) }
+    var favoriteAppsLayout by remember { mutableStateOf(FavoriteAppsLayout.BOTTOM_LEFT) }
+    var showFavoriteSettings by remember { mutableStateOf(false) }
+    var showFavoritePicker by remember { mutableStateOf(false) }
+
+    var leftShortcut by remember { mutableStateOf<BottomShortcut?>(null) }
+    var rightShortcut by remember { mutableStateOf<BottomShortcut?>(null) }
+    var pickingShortcutSide by remember { mutableStateOf<ShortcutSide?>(null) }
+
+    fun activateShortcut(shortcut: BottomShortcut) {
+        when (shortcut) {
+            is BottomShortcut.System -> handleSystemAction(context, shortcut.action)
+            is BottomShortcut.App -> launchAppShortcut(context, shortcut)
+        }
+    }
 
     var slotWidgets by remember { mutableStateOf<List<PlacedWidget>>(emptyList()) }
     var floatingWidgets by remember { mutableStateOf<List<FloatingWidget>>(emptyList()) }
@@ -101,9 +126,15 @@ fun LockScreen(
     var clockOffset by remember { mutableStateOf(Offset.Zero) }
     var greenBoxOffset by remember { mutableStateOf(Offset.Zero) }
     var savedClockOffset by remember { mutableStateOf(Offset.Zero) }
+    var clockScale by remember { mutableStateOf(1f) }
+    var savedClockScale by remember { mutableStateOf(1f) }
+    var favoriteAppsOffset by remember { mutableStateOf(Offset.Zero) }
+    var savedFavoriteAppsOffset by remember { mutableStateOf(Offset.Zero) }
 
     BackHandler(enabled = isFloating) {
         clockOffset = savedClockOffset
+        clockScale = savedClockScale
+        favoriteAppsOffset = savedFavoriteAppsOffset
         greenBoxOffset = Offset.Zero
         selectedFloatingUid = null
         isFloating = false
@@ -188,6 +219,8 @@ fun LockScreen(
                         visible = isFloating,
                         onConfirm = {
                             savedClockOffset = clockOffset
+                            savedClockScale = clockScale
+                            savedFavoriteAppsOffset = favoriteAppsOffset
                             greenBoxOffset = Offset.Zero
                             selectedFloatingUid = null
                             isFloating = false
@@ -206,7 +239,28 @@ fun LockScreen(
                             },
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        ClockHeader()
+                        Box(
+                            modifier = Modifier
+                                .then(
+                                    if (isFloating) Modifier
+                                        .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
+                                        .padding(8.dp)
+                                    else Modifier,
+                                ),
+                        ) {
+                            ClockHeader(
+                                modifier = Modifier.graphicsLayer {
+                                    scaleX = clockScale; scaleY = clockScale
+                                    transformOrigin = TransformOrigin(0.5f, 0.5f)
+                                },
+                            )
+                            if (isFloating) {
+                                ResizeHandles { dx, dy, _, _ ->
+                                    val delta = (dx + dy) / 2f
+                                    clockScale = (clockScale + delta).coerceIn(0.5f, 2.5f)
+                                }
+                            }
+                        }
                         Spacer(modifier = Modifier.height(16.dp))
                         WidgetSlotRow(
                             placedWidgets = slotWidgets,
@@ -221,10 +275,6 @@ fun LockScreen(
                         )
                     }
 
-                    if (addedApps.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(screenHeight * 0.03f))
-                        AddedAppsRow(apps = addedApps)
-                    }
                 }
 
                 if (isFloating) {
@@ -267,6 +317,67 @@ fun LockScreen(
                 )
             }
 
+            if (favoriteAppsEnabled && favoriteApps.isNotEmpty()) {
+                val favAlign = when (favoriteAppsLayout) {
+                    FavoriteAppsLayout.BOTTOM_LEFT -> Alignment.BottomStart
+                    FavoriteAppsLayout.BOTTOM_RIGHT -> Alignment.BottomEnd
+                    FavoriteAppsLayout.LEFT_VERTICAL -> Alignment.CenterStart
+                }
+                val favPad = when (favoriteAppsLayout) {
+                    FavoriteAppsLayout.BOTTOM_LEFT -> Modifier.padding(start = 16.dp, bottom = screenHeight * 0.13f)
+                    FavoriteAppsLayout.BOTTOM_RIGHT -> Modifier.padding(end = 16.dp, bottom = screenHeight * 0.13f)
+                    FavoriteAppsLayout.LEFT_VERTICAL -> Modifier.padding(start = 16.dp)
+                }
+                Box(
+                    modifier = Modifier
+                        .align(favAlign)
+                        .then(favPad)
+                        .offset { IntOffset(favoriteAppsOffset.x.roundToInt(), favoriteAppsOffset.y.roundToInt()) }
+                        .then(
+                            if (isFloating) Modifier
+                                .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
+                                .padding(6.dp)
+                                .pointerInput(Unit) {
+                                    detectDragGestures { change, drag ->
+                                        change.consume(); favoriteAppsOffset += drag
+                                    }
+                                }
+                            else Modifier,
+                        ),
+                ) {
+                    FavoriteAppsDisplay(favorites = favoriteApps, layout = favoriteAppsLayout)
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 24.dp, bottom = screenHeight * 0.04f),
+            ) {
+                BottomShortcutButton(
+                    shortcut = leftShortcut,
+                    isEditing = isFloating,
+                    onClick = {
+                        if (isFloating) pickingShortcutSide = ShortcutSide.LEFT
+                        else leftShortcut?.let { activateShortcut(it) }
+                    },
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 24.dp, bottom = screenHeight * 0.04f),
+            ) {
+                BottomShortcutButton(
+                    shortcut = rightShortcut,
+                    isEditing = isFloating,
+                    onClick = {
+                        if (isFloating) pickingShortcutSide = ShortcutSide.RIGHT
+                        else rightShortcut?.let { activateShortcut(it) }
+                    },
+                )
+            }
+
             hostedWidgets.forEach { hosted ->
                 key(hosted.uid) {
                     HostedWidgetItem(
@@ -300,12 +411,8 @@ fun LockScreen(
                 onSelect = { choice ->
                     showShortcutPopup = false
                     when (choice) {
-                        ShortcutChoice.AppWidget -> {
-                            addTarget = AddTarget.FLOATING
-                            showLockWidgetPicker = true
-                        }
                         ShortcutChoice.RealWidget -> showRealWidgetPicker = true
-                        ShortcutChoice.FavoriteApp -> showAppWidgetSheet = true
+                        ShortcutChoice.FavoriteApp -> showFavoriteSettings = true
                         ShortcutChoice.Text -> {}
                     }
                 },
@@ -338,13 +445,39 @@ fun LockScreen(
             )
         }
 
-        if (showAppWidgetSheet) {
-            AppWidgetBottomSheet(
-                apps = defaultAppList,
-                onDismiss = { showAppWidgetSheet = false },
-                onAppSelected = { app ->
-                    if (addedApps.none { it.id == app.id }) addedApps = addedApps + app
-                    showAppWidgetSheet = false
+        if (showFavoriteSettings && !showFavoritePicker) {
+            FavoriteAppsSettingsSheet(
+                enabled = favoriteAppsEnabled,
+                onEnabledChange = { favoriteAppsEnabled = it },
+                favorites = favoriteApps,
+                layout = favoriteAppsLayout,
+                onLayoutChange = { favoriteAppsLayout = it },
+                onOpenPicker = { showFavoritePicker = true },
+                onDismiss = { showFavoriteSettings = false },
+            )
+        }
+
+        if (showFavoritePicker) {
+            FavoriteAppsPickerScreen(
+                initial = favoriteApps,
+                onClose = { showFavoritePicker = false },
+                onApply = { picked ->
+                    favoriteApps = picked
+                    showFavoritePicker = false
+                },
+            )
+        }
+
+        pickingShortcutSide?.let { side ->
+            BottomShortcutPickerSheet(
+                onDismiss = { pickingShortcutSide = null },
+                onClear = {
+                    if (side == ShortcutSide.LEFT) leftShortcut = null else rightShortcut = null
+                    pickingShortcutSide = null
+                },
+                onSelected = { sc ->
+                    if (side == ShortcutSide.LEFT) leftShortcut = sc else rightShortcut = sc
+                    pickingShortcutSide = null
                 },
             )
         }

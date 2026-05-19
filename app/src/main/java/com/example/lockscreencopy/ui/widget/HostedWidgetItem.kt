@@ -2,6 +2,7 @@ package com.example.lockscreencopy.ui.widget
 
 import android.appwidget.AppWidgetHost
 import android.os.Bundle
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -9,12 +10,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.lockscreencopy.model.HostedAppWidget
 import kotlin.math.roundToInt
@@ -72,6 +76,7 @@ fun HostedWidgetItem(
             Box(
                 modifier = Modifier
                     .matchParentSize()
+                    .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
                     .pointerInput(hosted.uid) {
                         detectDragGestures { change, drag ->
                             change.consume(); onDrag(drag)
