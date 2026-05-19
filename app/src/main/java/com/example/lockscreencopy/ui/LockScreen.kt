@@ -270,6 +270,14 @@ fun LockScreen(
                             .padding(bottom = 6.dp),
                     )
                 }
+
+                BottomShortcutRow(
+                    leftApp = leftShortcutApp,
+                    rightApp = rightShortcutApp,
+                    isFloating = isFloating,
+                    onLeftTap = { if (isFloating) shortcutEditSide = BottomShortcutSide.LEFT },
+                    onRightTap = { if (isFloating) shortcutEditSide = BottomShortcutSide.RIGHT },
+                )
             }
 
             floatingWidgets.forEach { placed ->
