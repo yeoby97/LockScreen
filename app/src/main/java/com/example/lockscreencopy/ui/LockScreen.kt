@@ -349,10 +349,6 @@ fun LockScreen(
                 onSelect = { choice ->
                     showShortcutPopup = false
                     when (choice) {
-                        ShortcutChoice.AppWidget -> {
-                            addTarget = AddTarget.FLOATING
-                            showLockWidgetPicker = true
-                        }
                         ShortcutChoice.RealWidget -> showRealWidgetPicker = true
                         ShortcutChoice.FavoriteApp -> showAppWidgetSheet = true
                         ShortcutChoice.Text -> {}
