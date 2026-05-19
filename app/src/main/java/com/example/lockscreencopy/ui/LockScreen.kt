@@ -125,9 +125,12 @@ fun LockScreen(
     var clockOffset by remember { mutableStateOf(Offset.Zero) }
     var greenBoxOffset by remember { mutableStateOf(Offset.Zero) }
     var savedClockOffset by remember { mutableStateOf(Offset.Zero) }
+    var favoriteAppsOffset by remember { mutableStateOf(Offset.Zero) }
+    var savedFavoriteAppsOffset by remember { mutableStateOf(Offset.Zero) }
 
     BackHandler(enabled = isFloating) {
         clockOffset = savedClockOffset
+        favoriteAppsOffset = savedFavoriteAppsOffset
         greenBoxOffset = Offset.Zero
         selectedFloatingUid = null
         isFloating = false
@@ -212,6 +215,7 @@ fun LockScreen(
                         visible = isFloating,
                         onConfirm = {
                             savedClockOffset = clockOffset
+                            savedFavoriteAppsOffset = favoriteAppsOffset
                             greenBoxOffset = Offset.Zero
                             selectedFloatingUid = null
                             isFloating = false
@@ -298,7 +302,19 @@ fun LockScreen(
                     FavoriteAppsLayout.BOTTOM_RIGHT -> Modifier.padding(end = 16.dp, bottom = screenHeight * 0.13f)
                     FavoriteAppsLayout.LEFT_VERTICAL -> Modifier.padding(start = 16.dp)
                 }
-                Box(modifier = Modifier.align(favAlign).then(favPad)) {
+                Box(
+                    modifier = Modifier
+                        .align(favAlign)
+                        .then(favPad)
+                        .offset { IntOffset(favoriteAppsOffset.x.roundToInt(), favoriteAppsOffset.y.roundToInt()) }
+                        .then(
+                            if (isFloating) Modifier.pointerInput(Unit) {
+                                detectDragGestures { change, drag ->
+                                    change.consume(); favoriteAppsOffset += drag
+                                }
+                            } else Modifier,
+                        ),
+                ) {
                     FavoriteAppsDisplay(favorites = favoriteApps, layout = favoriteAppsLayout)
                 }
             }
