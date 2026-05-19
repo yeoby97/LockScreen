@@ -156,8 +156,8 @@ private fun SelectedRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         selected.forEach { sc ->
-            Box(modifier = Modifier.size(56.dp), contentAlignment = Alignment.Center) {
-                ShortcutBubble(sc, selected = false, modifier = Modifier.size(56.dp))
+            Box(modifier = Modifier.size(42.dp), contentAlignment = Alignment.Center) {
+                ShortcutBubble(sc, selected = false, modifier = Modifier.size(42.dp))
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -174,7 +174,7 @@ private fun SelectedRow(
         }
         repeat(MAX_FAVORITES - selected.size) {
             Box(
-                modifier = Modifier.size(56.dp).clip(CircleShape)
+                modifier = Modifier.size(42.dp).clip(CircleShape)
                     .border(1.5.dp, Color.White.copy(alpha = 0.4f), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
