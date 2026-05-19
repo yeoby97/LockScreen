@@ -40,7 +40,7 @@ import com.example.lockscreencopy.model.BottomShortcut
 import com.example.lockscreencopy.model.FavoriteAppsLayout
 import com.example.lockscreencopy.ui.widget.toBitmapSafe
 
-const val MAX_FAVORITES = 6
+const val MAX_FAVORITES = 5
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -192,7 +192,7 @@ private fun LayoutPreviewBottomLeft() {
             modifier = Modifier.align(Alignment.BottomStart),
             horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            repeat(4) { Dot() }
+            repeat(5) { Dot() }
         }
     }
 }
@@ -204,7 +204,7 @@ private fun LayoutPreviewLeftVertical() {
             modifier = Modifier.align(Alignment.CenterStart),
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            repeat(3) { Dot() }
+            repeat(5) { Dot() }
         }
     }
 }
@@ -216,7 +216,7 @@ private fun LayoutPreviewBottomRight() {
             modifier = Modifier.align(Alignment.BottomEnd),
             horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            repeat(3) { Dot() }
+            repeat(5) { Dot() }
         }
     }
 }

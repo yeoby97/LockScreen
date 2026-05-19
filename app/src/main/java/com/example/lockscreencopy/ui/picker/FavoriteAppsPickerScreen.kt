@@ -151,12 +151,12 @@ private fun SelectedRow(
     onRemove: (BottomShortcut) -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().height(80.dp).padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.Start),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         selected.forEach { sc ->
-            Box(modifier = Modifier.size(64.dp), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.size(56.dp), contentAlignment = Alignment.Center) {
                 ShortcutBubble(sc, selected = false, modifier = Modifier.size(56.dp))
                 Box(
                     modifier = Modifier

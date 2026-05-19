@@ -15,7 +15,7 @@ import java.util.Calendar
 import java.util.Locale
 
 @Composable
-fun ClockHeader(modifier: Modifier = Modifier) {
+fun ClockHeader(modifier: Modifier = Modifier, scale: Float = 1f) {
     val now = Calendar.getInstance().time
     val time = SimpleDateFormat("hh:mm", Locale.getDefault()).format(now)
     val date = SimpleDateFormat("M월 d일 EEEE", Locale.KOREAN).format(now)
@@ -23,13 +23,13 @@ fun ClockHeader(modifier: Modifier = Modifier) {
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = time,
-            color = Color.White, fontSize = 64.sp,
-            fontWeight = FontWeight.Light, letterSpacing = (-2).sp,
+            color = Color.White, fontSize = (64 * scale).sp,
+            fontWeight = FontWeight.Light, letterSpacing = (-2 * scale).sp,
         )
         Text(
             text = date,
-            color = Color.White.copy(alpha = 0.9f), fontSize = 16.sp,
-            modifier = Modifier.padding(top = 2.dp),
+            color = Color.White.copy(alpha = 0.9f), fontSize = (16 * scale).sp,
+            modifier = Modifier.padding(top = (2 * scale).dp),
         )
     }
 }

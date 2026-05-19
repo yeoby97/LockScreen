@@ -45,6 +45,8 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -124,6 +126,7 @@ fun LockScreen(
     var addCounter by remember { mutableStateOf(0) }
 
     var clockOffset by remember { mutableStateOf(Offset.Zero) }
+    var clockNaturalPosition by remember { mutableStateOf(Offset.Zero) }
     var greenBoxOffset by remember { mutableStateOf(Offset.Zero) }
     var savedClockOffset by remember { mutableStateOf(Offset.Zero) }
     var clockScale by remember { mutableStateOf(1f) }
@@ -168,6 +171,13 @@ fun LockScreen(
         targetValue = if (isFloating) 20.dp else 0.dp,
         animationSpec = tween(500, easing = FastOutSlowInEasing), label = "blur",
     )
+    val editAlpha by animateFloatAsState(
+        targetValue = if (isFloating) 1f else 0f,
+        animationSpec = tween(300, delayMillis = 200, easing = FastOutSlowInEasing), label = "editAlpha",
+    )
+
+    val screenWidthPx = with(density) { screenWidth.toPx() }
+    val screenHeightPx = with(density) { screenHeight.toPx() }
 
     val slotGap = 8.dp
     val slotSize = screenWidth * 0.1f
@@ -194,9 +204,11 @@ fun LockScreen(
                         val released = try {
                             withTimeout(500) { tryAwaitRelease(); true }
                         } catch (_: TimeoutCancellationException) {
+                            clockOffset = savedClockOffset
                             isFloating = true; false
                         }
                         if (!isFloating && released && System.currentTimeMillis() - t0 >= 500) {
+                            clockOffset = savedClockOffset
                             isFloating = true
                         }
                     })
@@ -217,6 +229,7 @@ fun LockScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     EditModeTopBar(
                         visible = isFloating,
+                        alpha = editAlpha,
                         onConfirm = {
                             savedClockOffset = clockOffset
                             savedClockScale = clockScale
@@ -231,7 +244,22 @@ fun LockScreen(
 
                     Column(
                         modifier = Modifier
-                            .offset { IntOffset(clockOffset.x.roundToInt(), clockOffset.y.roundToInt()) }
+                            .onGloballyPositioned { coords ->
+                                if (!isFloating) {
+                                    val pos = coords.positionInRoot()
+                                    clockNaturalPosition = Offset(
+                                        pos.x + coords.size.width / 2f,
+                                        pos.y + coords.size.height / 2f,
+                                    )
+                                }
+                            }
+                            .offset {
+                                val comp = clockCompensation(clockNaturalPosition, scale, density.density, screenWidthPx, screenHeightPx)
+                                IntOffset(
+                                    (clockOffset.x + comp.x).roundToInt(),
+                                    (clockOffset.y + comp.y).roundToInt(),
+                                )
+                            }
                             .pointerInput(isFloating) {
                                 if (isFloating) detectDragGestures { change, drag ->
                                     change.consume(); clockOffset += drag
@@ -243,21 +271,18 @@ fun LockScreen(
                             modifier = Modifier
                                 .then(
                                     if (isFloating) Modifier
-                                        .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
+                                        .border(1.dp, Color.White.copy(alpha = 0.7f * editAlpha), RoundedCornerShape(12.dp))
                                         .padding(8.dp)
                                     else Modifier,
                                 ),
                         ) {
-                            ClockHeader(
-                                modifier = Modifier.graphicsLayer {
-                                    scaleX = clockScale; scaleY = clockScale
-                                    transformOrigin = TransformOrigin(0.5f, 0.5f)
-                                },
-                            )
+                            ClockHeader(scale = clockScale)
                             if (isFloating) {
-                                ResizeHandles { dx, dy, _, _ ->
-                                    val delta = (dx + dy) / 2f
-                                    clockScale = (clockScale + delta).coerceIn(0.5f, 2.5f)
+                                Box(modifier = Modifier.matchParentSize().graphicsLayer { alpha = editAlpha }) {
+                                    ResizeHandles { dx, dy, _, _ ->
+                                        val delta = (dx + dy) / 2f
+                                        clockScale = (clockScale + delta).coerceIn(0.5f, 2.0f)
+                                    }
                                 }
                             }
                         }
@@ -280,6 +305,7 @@ fun LockScreen(
                 if (isFloating) {
                     Box(
                         modifier = Modifier
+                            .graphicsLayer { alpha = editAlpha }
                             .padding(bottom = screenHeight * 0.05f)
                             .offset { IntOffset(greenBoxOffset.x.roundToInt(), greenBoxOffset.y.roundToInt()) }
                             .pointerInput(isFloating) {
@@ -335,6 +361,7 @@ fun LockScreen(
                         .offset { IntOffset(favoriteAppsOffset.x.roundToInt(), favoriteAppsOffset.y.roundToInt()) }
                         .then(
                             if (isFloating) Modifier
+                                .graphicsLayer { alpha = editAlpha }
                                 .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
                                 .padding(6.dp)
                                 .pointerInput(Unit) {
@@ -501,14 +528,32 @@ private fun LockScreenPreview() {
     LockScreenCopyTheme { LockScreen(onUnlock = {}) }
 }
 
+// scale 변화로 인한 시계 위치 이동을 상쇄하는 보정 offset 역산
+// S = P + (N + O - P) * s = N  →  O = (N - P)(1 - s) / s
+private fun clockCompensation(
+    naturalPos: Offset,
+    scale: Float,
+    density: Float,
+    screenWidthPx: Float,
+    screenHeightPx: Float,
+): Offset {
+    if (scale == 1f) return Offset.Zero
+    val pivotX = screenWidthPx * 0.5f
+    val pivotY = screenHeightPx * 0.2f
+    return Offset(
+        x = (naturalPos.x - pivotX) * (1f - scale) / scale,
+        y = (naturalPos.y - pivotY) * (1f - scale) / scale,
+    )
+}
+
 @Composable
-private fun EditModeTopBar(visible: Boolean, onConfirm: () -> Unit) {
+private fun EditModeTopBar(visible: Boolean, alpha: Float = 1f, onConfirm: () -> Unit) {
     if (!visible) {
         Spacer(modifier = Modifier.height(48.dp))
         return
     }
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().graphicsLayer { this.alpha = alpha },
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Button(onClick = {}) { Text("배경화면") }
