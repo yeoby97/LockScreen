@@ -130,7 +130,8 @@ private fun generateAiRecommendation(
     installedApps: List<BottomShortcut.App>,
     systemShortcuts: List<BottomShortcut.System>,
 ): AiRecommendation {
-    // 2단계 LLM 호출을 Gemini 2.5 Flash로 대체할 자리를 남긴 deterministic fallback.
+    // TODO: Gemini 2.5 Flash 연동 시 BuildConfig.GEMINI_API_KEY를 사용하세요.
+    // 키 주입: ~/.gradle/gradle.properties 또는 프로젝트 local.properties의 GEMINI_API_KEY=...
     val normalized = prompt.lowercase()
     val apps = if (normalized.contains("운동") || normalized.contains("health")) {
         setOf("health", "weather")
