@@ -24,8 +24,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.Button
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -64,9 +69,12 @@ import com.example.lockscreencopy.model.PlacedWidget
 import com.example.lockscreencopy.model.WidgetSize
 import com.example.lockscreencopy.data.handleSystemAction
 import com.example.lockscreencopy.data.launchAppShortcut
+import com.example.lockscreencopy.ui.llm.LlmSuggestionOverlay
 import com.example.lockscreencopy.ui.picker.BottomShortcutPickerSheet
 import com.example.lockscreencopy.ui.picker.FavoriteAppsPickerScreen
 import com.example.lockscreencopy.ui.picker.FavoriteAppsSettingsSheet
+import com.example.lockscreencopy.ui.picker.LlmLayoutSheet
+import com.example.lockscreencopy.ui.picker.LlmSuggestionResult
 import com.example.lockscreencopy.ui.picker.LockWidgetPickerSheet
 import com.example.lockscreencopy.ui.picker.RealWidgetPickerSheet
 import com.example.lockscreencopy.ui.picker.ShortcutChoice
@@ -122,6 +130,9 @@ fun LockScreen(
     var floatingWidgets by remember { mutableStateOf<List<FloatingWidget>>(emptyList()) }
     var selectedFloatingUid by remember { mutableStateOf<String?>(null) }
     var addTarget by remember { mutableStateOf(AddTarget.SLOT) }
+
+    var showLlmSheet by remember { mutableStateOf(false) }
+    var llmSuggestion by remember { mutableStateOf<LlmSuggestionResult?>(null) }
 
     var addCounter by remember { mutableStateOf(0) }
 
@@ -501,6 +512,57 @@ fun LockScreen(
                 onSelected = { sc ->
                     if (side == ShortcutSide.LEFT) leftShortcut = sc else rightShortcut = sc
                     pickingShortcutSide = null
+                },
+            )
+        }
+
+        if (!isFloating && llmSuggestion == null) {
+            FloatingActionButton(
+                onClick = { showLlmSheet = true },
+                containerColor = Color(0xFF4DAAED),
+                contentColor = Color.White,
+                shape = CircleShape,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 24.dp, bottom = screenHeight * 0.18f),
+            ) {
+                Icon(Icons.Filled.AutoAwesome, contentDescription = "AI 위젯 배치")
+            }
+        }
+
+        if (showLlmSheet) {
+            LlmLayoutSheet(
+                onDismiss = { showLlmSheet = false },
+                onResult = { result ->
+                    showLlmSheet = false
+                    llmSuggestion = result
+                },
+            )
+        }
+
+        llmSuggestion?.let { suggestion ->
+            LlmSuggestionOverlay(
+                suggestion = suggestion,
+                onCancel = { llmSuggestion = null },
+                onConfirm = { commit ->
+                    val merged = (slotWidgets + commit.tray)
+                        .let { combined ->
+                            val cap = 4
+                            val out = ArrayList<PlacedWidget>(combined.size)
+                            var used = 0
+                            for (pw in combined) {
+                                val cost = if (pw.widget.size == WidgetSize.WIDE) 2 else 1
+                                if (used + cost > cap) continue
+                                out += pw
+                                used += cost
+                            }
+                            out
+                        }
+                    slotWidgets = merged
+                    floatingWidgets = floatingWidgets + commit.floating
+                    commit.left?.let { leftShortcut = it }
+                    commit.right?.let { rightShortcut = it }
+                    llmSuggestion = null
                 },
             )
         }
