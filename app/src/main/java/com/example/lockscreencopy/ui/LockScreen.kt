@@ -64,6 +64,9 @@ import com.example.lockscreencopy.model.PlacedWidget
 import com.example.lockscreencopy.model.WidgetSize
 import com.example.lockscreencopy.data.handleSystemAction
 import com.example.lockscreencopy.data.launchAppShortcut
+import com.example.lockscreencopy.data.loadInstalledApps
+import com.example.lockscreencopy.data.systemShortcuts
+import com.example.lockscreencopy.ui.picker.AiRecommendSheet
 import com.example.lockscreencopy.ui.picker.BottomShortcutPickerSheet
 import com.example.lockscreencopy.ui.picker.FavoriteAppsPickerScreen
 import com.example.lockscreencopy.ui.picker.FavoriteAppsSettingsSheet
@@ -99,6 +102,7 @@ fun LockScreen(
     var isFloating by remember { mutableStateOf(false) }
     var showShortcutPopup by remember { mutableStateOf(false) }
     var showLockWidgetPicker by remember { mutableStateOf(false) }
+    var showAiRecommend by remember { mutableStateOf(false) }
     var showRealWidgetPicker by remember { mutableStateOf(false) }
 
     var favoriteApps by remember { mutableStateOf(listOf<BottomShortcut>()) }
@@ -230,6 +234,7 @@ fun LockScreen(
                     EditModeTopBar(
                         visible = isFloating,
                         alpha = editAlpha,
+                        onOpenAi = { showAiRecommend = true },
                         onConfirm = {
                             savedClockOffset = clockOffset
                             savedClockScale = clockScale
@@ -505,6 +510,38 @@ fun LockScreen(
             )
         }
 
+
+        if (showAiRecommend) {
+            AiRecommendSheet(
+                installedApps = loadInstalledApps(context),
+                systemShortcuts = systemShortcuts,
+                onDismiss = { showAiRecommend = false },
+                onApply = { selection ->
+                    addCounter++
+                    val trayCandidates = selection.recommendation.trayCandidates.associateBy { it.id }
+                    val floatingCandidates = selection.recommendation.floatingCandidates.associateBy { it.id }
+                    slotWidgets = emptyList()
+                    var used = 0
+                    selection.trayWidgetIds.forEach { wid ->
+                        val widget = trayCandidates[wid] ?: return@forEach
+                        val need = if (widget.size == WidgetSize.WIDE) 2 else 1
+                        if (used + need <= 4) {
+                            used += need
+                            slotWidgets = slotWidgets + PlacedWidget(uid = "${widget.id}_ai_${addCounter}_$used", widget = widget)
+                        }
+                    }
+                    floatingWidgets = selection.floatingWidgetIds.mapIndexedNotNull { idx, wid ->
+                        val widget = floatingCandidates[wid] ?: return@mapIndexedNotNull null
+                        FloatingWidget(uid = "${widget.id}_ai_${addCounter}_$idx", widget = widget, offset = Offset(80f + idx * 25f, 280f + idx * 25f))
+                    }
+                    val scMap = (systemShortcuts + loadInstalledApps(context)).associateBy { it.id }
+                    leftShortcut = selection.leftShortcutId?.let { scMap[it] }
+                    rightShortcut = selection.rightShortcutId?.let { scMap[it] }
+                    showAiRecommend = false
+                },
+            )
+        }
+
         if (showRealWidgetPicker && appWidgetManager != null) {
             RealWidgetPickerSheet(
                 appWidgetManager = appWidgetManager,
@@ -543,12 +580,15 @@ private fun clockCompensation(
 }
 
 @Composable
-private fun EditModeTopBar(visible: Boolean, alpha: Float = 1f, onConfirm: () -> Unit) {
+private fun EditModeTopBar(visible: Boolean, alpha: Float = 1f, onOpenAi: () -> Unit, onConfirm: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().graphicsLayer { this.alpha = alpha },
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Button(onClick = {}, enabled = visible) { Text("배경화면") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = {}, enabled = visible) { Text("배경화면") }
+            Button(onClick = { if (visible) onOpenAi() }, enabled = visible) { Text("AI 추천") }
+        }
         Button(onClick = onConfirm, enabled = visible) { Text("확인") }
     }
 }
