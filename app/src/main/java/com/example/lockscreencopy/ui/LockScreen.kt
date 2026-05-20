@@ -11,6 +11,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -67,6 +68,7 @@ import com.example.lockscreencopy.data.launchAppShortcut
 import com.example.lockscreencopy.data.loadInstalledApps
 import com.example.lockscreencopy.data.systemShortcuts
 import com.example.lockscreencopy.ui.picker.AiRecommendSheet
+import com.example.lockscreencopy.ui.picker.AiRecommendation
 import com.example.lockscreencopy.ui.picker.BottomShortcutPickerSheet
 import com.example.lockscreencopy.ui.picker.FavoriteAppsPickerScreen
 import com.example.lockscreencopy.ui.picker.FavoriteAppsSettingsSheet
@@ -81,6 +83,7 @@ import com.example.lockscreencopy.ui.widget.FloatingWidgetItem
 import com.example.lockscreencopy.ui.widget.HostedWidgetItem
 import com.example.lockscreencopy.ui.widget.LockStarBar
 import com.example.lockscreencopy.ui.widget.ResizeHandles
+import com.example.lockscreencopy.ui.widget.WidgetCell
 import com.example.lockscreencopy.ui.widget.WidgetSlotRow
 import com.example.lockscreencopy.ui.theme.LockScreenCopyTheme
 import kotlinx.coroutines.TimeoutCancellationException
@@ -103,6 +106,8 @@ fun LockScreen(
     var showShortcutPopup by remember { mutableStateOf(false) }
     var showLockWidgetPicker by remember { mutableStateOf(false) }
     var showAiRecommend by remember { mutableStateOf(false) }
+    var aiRecommendation by remember { mutableStateOf<AiRecommendation?>(null) }
+    var trayPicked by remember { mutableStateOf(listOf<Int>()) }
     var showRealWidgetPicker by remember { mutableStateOf(false) }
 
     var favoriteApps by remember { mutableStateOf(listOf<BottomShortcut>()) }
@@ -516,30 +521,61 @@ fun LockScreen(
                 installedApps = loadInstalledApps(context),
                 systemShortcuts = systemShortcuts,
                 onDismiss = { showAiRecommend = false },
-                onApply = { selection ->
-                    addCounter++
-                    val trayCandidates = selection.recommendation.trayCandidates.associateBy { it.id }
-                    val floatingCandidates = selection.recommendation.floatingCandidates.associateBy { it.id }
-                    slotWidgets = emptyList()
-                    var used = 0
-                    selection.trayWidgetIds.forEach { wid ->
-                        val widget = trayCandidates[wid] ?: return@forEach
-                        val need = if (widget.size == WidgetSize.WIDE) 2 else 1
-                        if (used + need <= 4) {
-                            used += need
-                            slotWidgets = slotWidgets + PlacedWidget(uid = "${widget.id}_ai_${addCounter}_$used", widget = widget)
-                        }
-                    }
-                    floatingWidgets = selection.floatingWidgetIds.mapIndexedNotNull { idx, wid ->
-                        val widget = floatingCandidates[wid] ?: return@mapIndexedNotNull null
-                        FloatingWidget(uid = "${widget.id}_ai_${addCounter}_$idx", widget = widget, offset = Offset(80f + idx * 25f, 280f + idx * 25f))
-                    }
-                    val scMap = (systemShortcuts + loadInstalledApps(context)).associateBy { it.id }
-                    leftShortcut = selection.leftShortcutId?.let { scMap[it] }
-                    rightShortcut = selection.rightShortcutId?.let { scMap[it] }
+                onApply = { recommendation ->
+                    aiRecommendation = recommendation
+                    trayPicked = emptyList()
                     showAiRecommend = false
                 },
             )
+        }
+
+
+        aiRecommendation?.let { rec ->
+            // Tray candidate overlay
+            Box(modifier = Modifier.align(Alignment.TopCenter).padding(top = screenHeight * 0.27f)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(12.dp)).padding(8.dp)) {
+                    rec.trayCandidates.forEachIndexed { idx, w ->
+                        val on = trayPicked.contains(idx)
+                        Box(modifier = Modifier.width(if (w.size == WidgetSize.WIDE) 72.dp else 40.dp).height(40.dp).graphicsLayer { alpha = if (on) 0.9f else 0.35f }.clickable {
+                            val used = trayPicked.sumOf { i -> if (rec.trayCandidates[i].size == WidgetSize.WIDE) 2 else 1 }
+                            val need = if (w.size == WidgetSize.WIDE) 2 else 1
+                            if (on) {
+                                trayPicked = trayPicked - idx
+                                slotWidgets = slotWidgets.dropLast(1)
+                            } else if (used + need <= 4) {
+                                trayPicked = trayPicked + idx
+                                addCounter++
+                                slotWidgets = slotWidgets + PlacedWidget(uid = "${w.id}_ai_${addCounter}_${idx}", widget = w)
+                            }
+                        }) { WidgetCell(widget = w) }
+                    }
+                }
+            }
+
+            // Floating area overlay candidates (tap to add draggable widget)
+            rec.floatingCandidates.forEachIndexed { idx, w ->
+                Box(modifier = Modifier.offset { IntOffset((24 + idx * 54), (360 + idx * 32)) }.width(if (w.size == WidgetSize.WIDE) 120.dp else 72.dp).height(52.dp)
+                    .graphicsLayer { alpha = 0.4f }
+                    .background(Color.Black.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
+                    .clickable {
+                        addCounter++
+                        floatingWidgets = floatingWidgets + FloatingWidget(uid = "${w.id}_ai_${addCounter}_${idx}", widget = w, offset = Offset(80f + idx * 20f, 300f + idx * 20f))
+                    }) { WidgetCell(widget = w) }
+            }
+
+            // Shortcut overlays
+            rec.shortcutCandidates.take(4).forEachIndexed { idx, sc ->
+                val isLeft = idx % 2 == 0
+                Box(modifier = Modifier
+                    .align(if (isLeft) Alignment.BottomStart else Alignment.BottomEnd)
+                    .padding(start = if (isLeft) 20.dp else 0.dp, end = if (isLeft) 0.dp else 20.dp, bottom = screenHeight * 0.10f)
+                    .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(16.dp))
+                    .clickable { if (isLeft) leftShortcut = sc else rightShortcut = sc }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .graphicsLayer { alpha = 0.45f }) {
+                    Text((if (isLeft) "좌 " else "우 ") + sc.label, color = Color.White)
+                }
+            }
         }
 
         if (showRealWidgetPicker && appWidgetManager != null) {

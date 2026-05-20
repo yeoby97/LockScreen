@@ -47,7 +47,7 @@ fun AiRecommendSheet(
     installedApps: List<BottomShortcut.App>,
     systemShortcuts: List<BottomShortcut.System>,
     onDismiss: () -> Unit,
-    onApply: (AiSelection) -> Unit,
+    onApply: (AiRecommendation) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
@@ -122,9 +122,7 @@ fun AiRecommendSheet(
                 }
                 item {
                     Spacer(Modifier.height(12.dp))
-                    Button(onClick = {
-                        onApply(AiSelection(selectedTray.value.toList(), selectedFloating.value.toList(), selectedLeft.value, selectedRight.value, r))
-                    }) { Text("적용") }
+                    Button(onClick = { onApply(r) }) { Text("후보 보내기") }
                 }
             }
         }
@@ -151,13 +149,6 @@ data class AiRecommendation(
     val shortcutCandidates: List<BottomShortcut>,
 )
 
-data class AiSelection(
-    val trayWidgetIds: List<String>,
-    val floatingWidgetIds: List<String>,
-    val leftShortcutId: String?,
-    val rightShortcutId: String?,
-    val recommendation: AiRecommendation,
-)
 
 private fun fetchRecommendation(prompt: String, installedApps: List<BottomShortcut.App>, systemShortcuts: List<BottomShortcut.System>): AiRecommendation {
     val apiKey = BuildConfig.GEMINI_API_KEY
