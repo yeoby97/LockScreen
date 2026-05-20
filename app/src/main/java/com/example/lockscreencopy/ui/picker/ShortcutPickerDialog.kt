@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 
-enum class ShortcutChoice { AppWidget, RealWidget, FavoriteApp, Text }
+enum class ShortcutChoice { RealWidget, FavoriteApp, Text }
 
 @Composable
 fun ShortcutPickerDialog(
@@ -37,13 +37,9 @@ fun ShortcutPickerDialog(
                     color = Color.Black, modifier = Modifier.padding(bottom = 16.dp),
                 )
                 Button(
-                    onClick = { onSelect(ShortcutChoice.AppWidget) },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                ) { Text("앱 위젯 (샘플)") }
-                Button(
                     onClick = { onSelect(ShortcutChoice.RealWidget) },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                ) { Text("실제 앱 위젯") }
+                ) { Text("앱 위젯") }
                 Button(
                     onClick = { onSelect(ShortcutChoice.FavoriteApp) },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),

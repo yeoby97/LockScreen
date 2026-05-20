@@ -1,6 +1,7 @@
 package com.example.lockscreencopy.ui.widget
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
@@ -53,6 +55,13 @@ fun FloatingWidgetItem(
             },
     ) {
         WidgetCell(widget = placed.widget, modifier = Modifier.fillMaxSize())
+
+        if (isFloating) {
+            Box(
+                modifier = Modifier.matchParentSize()
+                    .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(12.dp)),
+            )
+        }
 
         if (isFloating && isSelected) ResizeHandles(onResize)
 
