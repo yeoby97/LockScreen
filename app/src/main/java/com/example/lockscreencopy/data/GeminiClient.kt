@@ -7,10 +7,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 data class LlmRecommendation(
@@ -27,10 +29,16 @@ object GeminiClient {
     private const val ENDPOINT =
         "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent"
 
+    // HTTP/2 협상 실패로 인한 "Connection reset"을 피하기 위해 HTTP/1.1만 사용
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(40, TimeUnit.SECONDS)
+        .writeTimeout(40, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .protocols(listOf(Protocol.HTTP_1_1))
         .build()
+
+    private const val MAX_ATTEMPTS = 3
 
     private val jsonMedia = "application/json; charset=utf-8".toMediaType()
 
@@ -133,15 +141,38 @@ object GeminiClient {
         }
         val request = Request.Builder()
             .url("$ENDPOINT?key=$API_KEY")
+            .header("Content-Type", "application/json; charset=utf-8")
+            .header("Accept", "application/json")
             .post(body.toString().toRequestBody(jsonMedia))
             .build()
-        client.newCall(request).execute().use { resp ->
-            val raw = resp.body?.string().orEmpty()
-            if (!resp.isSuccessful) {
-                throw LlmException("Gemini 호출 실패 (${resp.code}): $raw")
+
+        var lastError: Throwable? = null
+        for (attempt in 1..MAX_ATTEMPTS) {
+            try {
+                client.newCall(request).execute().use { resp ->
+                    val raw = resp.body?.string().orEmpty()
+                    if (!resp.isSuccessful) {
+                        if (resp.code in 500..599 && attempt < MAX_ATTEMPTS) {
+                            lastError = LlmException("서버 오류 ${resp.code}")
+                            return@use
+                        }
+                        throw LlmException("Gemini 호출 실패 (${resp.code}): ${raw.take(300)}")
+                    }
+                    return extractText(raw)
+                }
+            } catch (e: IOException) {
+                lastError = e
+                if (attempt >= MAX_ATTEMPTS) {
+                    throw LlmException(
+                        "네트워크 오류로 Gemini에 연결할 수 없습니다 (${e.javaClass.simpleName}: ${e.message}). " +
+                            "Wi-Fi/데이터 연결을 확인하세요.",
+                        e,
+                    )
+                }
+                Thread.sleep((300L * attempt))
             }
-            return extractText(raw)
         }
+        throw LlmException("Gemini 호출 실패", lastError)
     }
 
     private fun extractText(rawJson: String): String {
