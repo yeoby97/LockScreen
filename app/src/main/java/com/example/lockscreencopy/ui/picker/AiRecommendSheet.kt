@@ -162,35 +162,73 @@ data class AiSelection(
 private fun fetchRecommendation(prompt: String, installedApps: List<BottomShortcut.App>, systemShortcuts: List<BottomShortcut.System>): AiRecommendation {
     val apiKey = BuildConfig.GEMINI_API_KEY
     if (apiKey.isBlank()) return fallbackRecommendation(prompt, installedApps, systemShortcuts)
+
     return runCatching {
-        val appNames = (lockWidgetApps.map { it.name } + systemShortcuts.map { it.label } + installedApps.map { it.label }).joinToString(", ")
-        val widgetNames = lockWidgetApps.flatMap { app -> app.widgets.map { "${app.id}:${it.id}:${it.name}" } }.joinToString("\n")
-        val body = JSONObject().put("contents", JSONArray().put(JSONObject().put("parts", JSONArray().put(JSONObject().put("text",
-            """
+        // 1단계: 앱/기능 선택 (시스템 토글 + 설치 앱 + 위젯앱)
+        val appCatalog = lockWidgetApps.joinToString("\n") { "APP:${it.id}:${it.name}" }
+        val systemCatalog = systemShortcuts.joinToString("\n") { "SYSTEM:${it.id}:${it.label}" }
+        val installedCatalog = installedApps.joinToString("\n") { "INSTALLED:${it.id}:${it.label}" }
+
+        val step1Prompt = """
             사용자 요청: $prompt
-            1단계: 아래 앱/기능 목록에서 관련 appId 최대 4개를 고르세요: $appNames
-            2단계: 아래 위젯 목록에서 tray(최대4칸), floating(최대4개) 후보를 고르세요:
-            $widgetNames
-            JSON으로만 답변:
-            {"appIds":["..."],"trayWidgetIds":["..."],"floatingWidgetIds":["..."]}
-            """.trimIndent()
-        )))))
-        val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey")
-        val conn = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            setRequestProperty("Content-Type", "application/json")
-            doOutput = true
-            outputStream.use { it.write(body.toString().toByteArray()) }
-        }
-        val response = conn.inputStream.bufferedReader().use { it.readText() }
-        val text = JSONObject(response).getJSONArray("candidates").getJSONObject(0)
-            .getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text")
-        val jsonText = text.substringAfter("{").substringBeforeLast("}").let { "{$it}" }
-        val parsed = JSONObject(jsonText)
-        val trayIds = parsed.optJSONArray("trayWidgetIds").toStrList()
-        val floatingIds = parsed.optJSONArray("floatingWidgetIds").toStrList()
-        buildRecommendationFromIds(trayIds, floatingIds, installedApps, systemShortcuts)
+            아래 후보에서 관련 appId를 고르세요. 최대 6개. JSON만 반환.
+            위젯 앱 목록:
+            $appCatalog
+            시스템 기능 목록:
+            $systemCatalog
+            설치 앱 목록:
+            $installedCatalog
+            반환 스키마:
+            {"appIds":["weather","health"],"shortcutIds":["sys_flashlight","app_com.xxx"]}
+        """.trimIndent()
+        val step1 = callGeminiJson(apiKey, step1Prompt)
+        val appIds = step1.optJSONArray("appIds").toStrList().toSet()
+        val pickedWidgetApps = lockWidgetApps.filter { it.id in appIds }
+
+        // 2단계: 영역별 위젯/바로가기 선택 (중복 허용)
+        val widgetCatalog = pickedWidgetApps.flatMap { app -> app.widgets.map { "${app.id}:${it.id}:${it.name}:${it.size}" } }
+            .joinToString("\n")
+        val shortcutCatalog = (systemShortcuts + installedApps).joinToString("\n") { "${it.id}:${it.label}" }
+
+        val step2Prompt = """
+            사용자 요청: $prompt
+            선택된 앱: ${pickedWidgetApps.joinToString { it.name }}
+            트레이/자유배치/좌우 바로가기 후보를 고르세요. 중복 허용. JSON만 반환.
+            트레이는 최대 4칸이며 WIDE는 2칸, SMALL은 1칸.
+            위젯 목록:
+            $widgetCatalog
+            바로가기 목록:
+            $shortcutCatalog
+            반환 스키마:
+            {
+              "trayWidgetIds":["h1","w_temp","h1"],
+              "floatingWidgetIds":["w_uv","w_uv","w_rain"],
+              "shortcutCandidateIds":["sys_flashlight","app_com.foo","app_com.foo"]
+            }
+        """.trimIndent()
+        val step2 = callGeminiJson(apiKey, step2Prompt)
+
+        val trayIds = step2.optJSONArray("trayWidgetIds").toStrList()
+        val floatingIds = step2.optJSONArray("floatingWidgetIds").toStrList()
+        val shortcutIds = step2.optJSONArray("shortcutCandidateIds").toStrList()
+        buildRecommendationFromIds(trayIds, floatingIds, shortcutIds, installedApps, systemShortcuts, pickedWidgetApps)
     }.getOrElse { fallbackRecommendation(prompt, installedApps, systemShortcuts) }
+}
+
+private fun callGeminiJson(apiKey: String, prompt: String): JSONObject {
+    val body = JSONObject().put("contents", JSONArray().put(JSONObject().put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
+    val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey")
+    val conn = (url.openConnection() as HttpURLConnection).apply {
+        requestMethod = "POST"
+        setRequestProperty("Content-Type", "application/json")
+        doOutput = true
+        outputStream.use { it.write(body.toString().toByteArray()) }
+    }
+    val response = conn.inputStream.bufferedReader().use { it.readText() }
+    val text = JSONObject(response).getJSONArray("candidates").getJSONObject(0)
+        .getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text")
+    val jsonText = text.substringAfter("{").substringBeforeLast("}").let { "{$it}" }
+    return JSONObject(jsonText)
 }
 
 private fun JSONArray?.toStrList(): List<String> = if (this == null) emptyList() else (0 until length()).mapNotNull { optString(it) }
@@ -198,14 +236,22 @@ private fun JSONArray?.toStrList(): List<String> = if (this == null) emptyList()
 private fun buildRecommendationFromIds(
     trayIds: List<String>,
     floatingIds: List<String>,
+    shortcutIds: List<String>,
     installedApps: List<BottomShortcut.App>,
     systemShortcuts: List<BottomShortcut.System>,
+    pickedWidgetApps: List<com.example.lockscreencopy.model.WidgetApp>,
 ): AiRecommendation {
-    val allWidgets = lockWidgetApps.flatMap { it.widgets }
+    val baseApps = if (pickedWidgetApps.isNotEmpty()) pickedWidgetApps else lockWidgetApps
+    val allWidgets = baseApps.flatMap { it.widgets }
     val tray = trayIds.mapNotNull { id -> allWidgets.find { it.id == id } }
     val floating = floatingIds.mapNotNull { id -> allWidgets.find { it.id == id } }
-    val sc = (systemShortcuts + installedApps).take(8)
-    return AiRecommendation(if (tray.isNotEmpty()) tray else allWidgets.take(4), if (floating.isNotEmpty()) floating else allWidgets.drop(1).take(4), sc)
+    val shortcutMap = (systemShortcuts + installedApps).associateBy { it.id }
+    val sc = shortcutIds.mapNotNull { shortcutMap[it] }
+    return AiRecommendation(
+        if (tray.isNotEmpty()) tray else allWidgets.take(6),
+        if (floating.isNotEmpty()) floating else allWidgets.drop(1).take(6),
+        if (sc.isNotEmpty()) sc else (systemShortcuts + installedApps).take(10),
+    )
 }
 
 private fun fallbackRecommendation(prompt: String, installedApps: List<BottomShortcut.App>, systemShortcuts: List<BottomShortcut.System>): AiRecommendation {
