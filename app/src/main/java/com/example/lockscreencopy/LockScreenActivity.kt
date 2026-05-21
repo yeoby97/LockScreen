@@ -231,7 +231,11 @@ class LockScreenActivity : ComponentActivity() {
                 providerInfo = info,
                 widthPx = (minWdp * d).toInt(),
                 heightPx = (minHdp * d).toInt(),
-                offset = Offset(200f + hostedWidgets.size * 30f, 600f + hostedWidgets.size * 30f),
+                offset = nextHostedWidgetOffset(
+                    index = hostedWidgets.size,
+                    widthPx = (minWdp * d).toInt(),
+                    heightPx = (minHdp * d).toInt(),
+                ),
             ),
         )
     }
