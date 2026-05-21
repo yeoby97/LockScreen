@@ -2,6 +2,9 @@ package com.example.lockscreencopy.ui.widget
 
 import android.appwidget.AppWidgetHost
 import android.os.Bundle
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -37,12 +40,16 @@ fun HostedWidgetItem(
     val density = LocalDensity.current
     val baseWidthDp = with(density) { hosted.widthPx.toDp() }
     val baseHeightDp = with(density) { hosted.heightPx.toDp() }
+    val animatedX = animateIntAsState(hosted.offset.x.roundToInt(), spring(stiffness = 420f), label = "hostedX")
+    val animatedY = animateIntAsState(hosted.offset.y.roundToInt(), spring(stiffness = 420f), label = "hostedY")
+    val animatedScaleX = animateFloatAsState(hosted.scaleX, spring(stiffness = 450f), label = "hostedScaleX")
+    val animatedScaleY = animateFloatAsState(hosted.scaleY, spring(stiffness = 450f), label = "hostedScaleY")
 
     Box(
         modifier = Modifier
-            .offset { IntOffset(hosted.offset.x.roundToInt(), hosted.offset.y.roundToInt()) }
-            .width(baseWidthDp * hosted.scaleX)
-            .height(baseHeightDp * hosted.scaleY)
+            .offset { IntOffset(animatedX.value, animatedY.value) }
+            .width(baseWidthDp * animatedScaleX.value)
+            .height(baseHeightDp * animatedScaleY.value)
             .pointerInput(isFloating, hosted.uid) {
                 if (isFloating) detectTapGestures(onTap = { onSelectToggle() })
             }
@@ -61,8 +68,8 @@ fun HostedWidgetItem(
                 },
                 update = { view ->
                     val d = view.resources.displayMetrics.density
-                    val wDp = (hosted.widthPx / d * hosted.scaleX).toInt()
-                    val hDp = (hosted.heightPx / d * hosted.scaleY).toInt()
+                    val wDp = (hosted.widthPx / d * animatedScaleX.value).toInt()
+                    val hDp = (hosted.heightPx / d * animatedScaleY.value).toInt()
                     try {
                         view.updateAppWidgetSize(Bundle(), wDp, hDp, wDp, hDp)
                     } catch (_: Exception) {}

@@ -8,6 +8,7 @@ import android.appwidget.AppWidgetProviderInfo
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.os.Build
+import android.graphics.RectF
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -232,7 +233,6 @@ class LockScreenActivity : ComponentActivity() {
                 widthPx = (minWdp * d).toInt(),
                 heightPx = (minHdp * d).toInt(),
                 offset = nextHostedWidgetOffset(
-                    index = hostedWidgets.size,
                     widthPx = (minWdp * d).toInt(),
                     heightPx = (minHdp * d).toInt(),
                 ),
@@ -250,41 +250,76 @@ class LockScreenActivity : ComponentActivity() {
     }
 
     private fun nextHostedWidgetOffset(
-        index: Int,
         widthPx: Int,
         heightPx: Int,
     ): Offset {
         val dm = resources.displayMetrics
         val d = dm.density
-    
-        val margin = 24f * d
-        val gap = 18f * d
-    
+
         val screenW = dm.widthPixels.toFloat()
         val screenH = dm.heightPixels.toFloat()
-    
-        val startY = screenH * 0.34f
-        val maxY = screenH * 0.72f
-    
-        val colWidth = (screenW - margin * 2f - gap) / 2f
-    
-        val isWide = widthPx > colWidth
-    
-        return if (isWide) {
-            val wideRow = index
-            Offset(
-                x = margin,
-                y = (startY + wideRow * (heightPx + gap)).coerceAtMost(maxY),
-            )
-        } else {
-            val col = index % 2
-            val row = index / 2
-    
-            Offset(
-                x = margin + col * (colWidth + gap),
-                y = (startY + row * (heightPx + gap)).coerceAtMost(maxY),
-            )
+
+        val sideMargin = 20f * d
+        val topClockReserved = screenH * 0.30f
+        val bottomShortcutReserved = screenH * 0.16f
+
+        val safeLeft = sideMargin
+        val safeTop = topClockReserved
+        val safeRight = screenW - sideMargin
+        val safeBottom = screenH - bottomShortcutReserved
+
+        val step = 16f * d
+        val candidateW = widthPx.toFloat()
+        val candidateH = heightPx.toFloat()
+
+        val maxX = (safeRight - candidateW).coerceAtLeast(safeLeft)
+        val maxY = (safeBottom - candidateH).coerceAtLeast(safeTop)
+
+        val occupied = hostedWidgets.map { occupiedRect(it) }
+
+        var bestOffset = Offset(safeLeft, safeTop)
+        var lowestOverlap = Float.MAX_VALUE
+
+        var y = safeTop
+        while (y <= maxY + 0.5f) {
+            var x = safeLeft
+            while (x <= maxX + 0.5f) {
+                val candidate = RectF(x, y, x + candidateW, y + candidateH)
+                val overlap = overlapArea(candidate, occupied)
+                if (overlap <= 0f) {
+                    return Offset(x, y)
+                }
+                if (overlap < lowestOverlap) {
+                    lowestOverlap = overlap
+                    bestOffset = Offset(x, y)
+                }
+                x += step
+            }
+            y += step
         }
+
+        Toast.makeText(this, "공간이 부족해 가장 덜 겹치는 위치에 배치했어요", Toast.LENGTH_SHORT).show()
+        return bestOffset
+    }
+
+    private fun occupiedRect(widget: HostedAppWidget): RectF {
+        val w = widget.widthPx * widget.scaleX
+        val h = widget.heightPx * widget.scaleY
+        return RectF(widget.offset.x, widget.offset.y, widget.offset.x + w, widget.offset.y + h)
+    }
+
+    private fun overlapArea(candidate: RectF, existing: List<RectF>): Float {
+        var total = 0f
+        existing.forEach { rect ->
+            val left = maxOf(candidate.left, rect.left)
+            val top = maxOf(candidate.top, rect.top)
+            val right = minOf(candidate.right, rect.right)
+            val bottom = minOf(candidate.bottom, rect.bottom)
+            if (right > left && bottom > top) {
+                total += (right - left) * (bottom - top)
+            }
+        }
+        return total
     }
 
     private fun removeHosted(uid: String) {
