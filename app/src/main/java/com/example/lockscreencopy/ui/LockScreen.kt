@@ -518,10 +518,12 @@ fun LockScreen(
             // 자유 배치 영역 ghost: 실제 설치된 앱의 위젯만 사용 (활성 실제 앱의 추천만)
             if (isFloating) {
                 val occupiedRects = buildList {
-                    val slotRowWidth = slotSize.toPx() * 4f + slotGap.toPx() * 3f
+                    val slotSizePx = with(density) { slotSize.toPx() }
+                    val slotGapPx = with(density) { slotGap.toPx() }
+                    val slotRowWidth = slotSizePx * 4f + slotGapPx * 3f
                     val slotRowLeft = (screenWidthPx - slotRowWidth) / 2f
                     val slotRowTop = screenHeightPx * 0.32f
-                    add(RectBounds(slotRowLeft, slotRowTop, slotRowLeft + slotRowWidth, slotRowTop + slotSize.toPx()))
+                    add(RectBounds(slotRowLeft, slotRowTop, slotRowLeft + slotRowWidth, slotRowTop + slotSizePx))
                     addAll(floatingWidgets.map { placed ->
                         val width = with(density) {
                             (if (placed.widget.size == WidgetSize.WIDE) 180.dp else 100.dp).toPx() * placed.scaleX
