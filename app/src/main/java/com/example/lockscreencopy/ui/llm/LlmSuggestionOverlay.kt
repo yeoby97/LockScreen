@@ -441,13 +441,8 @@ fun LlmSuggestionOverlay(
 }
 
 private fun defaultPlacementMode(choice: RecommendedAppChoice): AppPlacementMode {
-    return if (choice.providers.isNotEmpty()) {
-        AppPlacementMode.WIDGET
-    } else {
-        AppPlacementMode.SHORTCUT
-    }
+    return AppPlacementMode.NONE
 }
-
 private fun RecommendedAppChoice.selectedProvider(index: Int?): AppWidgetProviderInfo? {
     if (providers.isEmpty()) return null
 
