@@ -680,7 +680,7 @@ fun LockScreen(
                     commit.right?.let { rightShortcut = it }
 
                     // AI 추천에서 사용자가 "위젯" 또는 "둘 다"로 고른 실제 앱 위젯 추가
-                    commit.realWidgets.forEach { provider ->
+                    commit.realWidgets.take(2).forEach { provider ->
                         onRealWidgetSelected(provider)
                     }
 
