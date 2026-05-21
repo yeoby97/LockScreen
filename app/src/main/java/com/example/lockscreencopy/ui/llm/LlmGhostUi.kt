@@ -59,13 +59,18 @@ private val GhostBorder = Color(0xFFFFA000)
 
 data class GhostInstance(val key: String, val widget: LockWidget)
 
-/** 우측 스트립에 표시할 앱 한 칸. mock 앱(vector icon) / 실제 앱(bitmap icon) 모두 지원. */
+/** 우측 스트립에 표시할 앱 한 칸. mock 앱(vector icon) + 실제 앱(bitmap icon) 모두 지원.
+ *  하나의 엔트리가 mock 트레이 추천과 실제 자유 추천을 동시에 가질 수 있다. */
 data class StripAppEntry(
     val id: String,
     val name: String,
     val iconBg: Color,
     val iconVector: ImageVector? = null,
     val iconBitmap: Bitmap? = null,
+    /** 이 엔트리로 매칭되는 mock WidgetApp.id (있으면 트레이 ghost 노출) */
+    val mockAppId: String? = null,
+    /** 이 엔트리로 매칭되는 실제 앱 패키지명 목록 (있으면 자유 ghost 노출) */
+    val realPackages: List<String> = emptyList(),
 )
 
 /**
@@ -159,43 +164,37 @@ fun LlmTrayGhostRow(
 ) {
     val visible = ghosts.filter { it.key !in consumed }
     if (visible.isEmpty()) return
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            "추천 트레이 위젯",
-            color = SideChip, fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(bottom = 4.dp),
-        )
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(slotGap, Alignment.CenterHorizontally),
-        ) {
-            visible.forEach { ghost ->
-                val span = if (ghost.widget.size == WidgetSize.WIDE) 2 else 1
-                val disabled = trayUsedSpan + span > 4
-                Box(
-                    modifier = Modifier
-                        .width(slotSize * span)
-                        .height(slotSize)
-                        .graphicsLayer { alpha = if (disabled) 0.25f else 0.55f }
-                        .clip(RoundedCornerShape(12.dp))
-                        .border(1.5.dp, GhostBorder, RoundedCornerShape(12.dp))
-                        .clickable(enabled = !disabled) { onTap(ghost) },
-                ) {
-                    WidgetCell(widget = ghost.widget, modifier = Modifier.fillMaxSize())
-                }
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(slotGap, Alignment.CenterHorizontally),
+    ) {
+        visible.forEach { ghost ->
+            val span = if (ghost.widget.size == WidgetSize.WIDE) 2 else 1
+            val disabled = trayUsedSpan + span > 4
+            Box(
+                modifier = Modifier
+                    .width(slotSize * span)
+                    .height(slotSize)
+                    .graphicsLayer { alpha = if (disabled) 0.25f else 0.55f }
+                    .clip(RoundedCornerShape(12.dp))
+                    .border(1.5.dp, GhostBorder, RoundedCornerShape(12.dp))
+                    .clickable(enabled = !disabled) { onTap(ghost) },
+            ) {
+                WidgetCell(widget = ghost.widget, modifier = Modifier.fillMaxSize())
             }
         }
     }
 }
 
 /**
- * 좌/우 하단 바로가기 버튼 바로 위에 투명 ghost 로 추천 표시.
- * - 본체 탭: 적용 (onAccept)
- * - 우상단 X 탭: 추천 취소 (onCancel)
+ * 좌/우 하단 바로가기 버튼 바로 위의 추천 ghost.
+ * - 본체 탭: 토글 (적용 / 적용 해제). 적용 상태도 ghost 가 사라지지 않고 시각만 바뀜.
+ * - 우상단 X 탭: 추천 자체 취소 (onCancel)
  */
 @Composable
 fun ShortcutRecommendationBadge(
     shortcut: BottomShortcut,
-    onAccept: () -> Unit,
+    applied: Boolean,
+    onToggle: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -203,11 +202,18 @@ fun ShortcutRecommendationBadge(
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .graphicsLayer { alpha = 0.55f }
+                .graphicsLayer { alpha = if (applied) 1f else 0.55f }
                 .clip(CircleShape)
-                .background(Color.Black.copy(alpha = 0.25f))
-                .border(1.5.dp, GhostBorder, CircleShape)
-                .clickable(onClick = onAccept),
+                .background(
+                    if (applied) Color(0xFF4DAAED).copy(alpha = 0.9f)
+                    else Color.Black.copy(alpha = 0.25f),
+                )
+                .border(
+                    width = if (applied) 2.dp else 1.5.dp,
+                    color = if (applied) Color(0xFF32D74B) else GhostBorder,
+                    shape = CircleShape,
+                )
+                .clickable(onClick = onToggle),
             contentAlignment = Alignment.Center,
         ) {
             when (shortcut) {
@@ -215,10 +221,21 @@ fun ShortcutRecommendationBadge(
                     shortcut.icon, contentDescription = shortcut.label,
                     tint = Color.White, modifier = Modifier.size(26.dp),
                 )
-                is BottomShortcut.App -> Icon(
-                    Icons.Filled.Close, contentDescription = shortcut.label,
-                    tint = Color.White, modifier = Modifier.size(26.dp),
-                )
+                is BottomShortcut.App -> {
+                    val bmp = remember(shortcut.id) { shortcut.drawable?.toBitmapSafe() }
+                    if (bmp != null) {
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = shortcut.label,
+                            modifier = Modifier.size(32.dp).clip(CircleShape),
+                        )
+                    } else {
+                        Icon(
+                            Icons.Filled.Widgets, contentDescription = shortcut.label,
+                            tint = Color.White, modifier = Modifier.size(26.dp),
+                        )
+                    }
+                }
             }
         }
         Box(

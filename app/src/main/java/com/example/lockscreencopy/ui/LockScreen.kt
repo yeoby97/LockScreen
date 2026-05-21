@@ -175,12 +175,29 @@ fun LockScreen(
     var activeLlmAppId by remember(llmSuggestion) { mutableStateOf<String?>(null) }
     val consumedGhostKeys = remember(llmSuggestion) { mutableStateListOf<String>() }
     val ghostOriginByUid = remember(llmSuggestion) { mutableStateMapOf<String, String>() }
+    /** 실제 위젯 ghost 를 탭한 직후 ~ HostedAppWidget 이 생성되기까지의 component 목록 */
+    val pendingRealComponents = remember(llmSuggestion) { mutableStateListOf<String>() }
     var leftShortcutRecDismissed by remember(llmSuggestion) { mutableStateOf(false) }
     var rightShortcutRecDismissed by remember(llmSuggestion) { mutableStateOf(false) }
 
     fun releaseGhostFor(uid: String) {
         val key = ghostOriginByUid.remove(uid) ?: return
         consumedGhostKeys.remove(key)
+    }
+
+    // 새로 추가된 hosted widget 이 pending real ghost 의 결과면 uid → ghost key 매핑 기록.
+    // 이후 사용자가 해당 hosted widget 을 삭제하면 releaseGhostFor 로 ghost 복원.
+    LaunchedEffect(hostedWidgets.size, pendingRealComponents.size) {
+        if (pendingRealComponents.isEmpty()) return@LaunchedEffect
+        hostedWidgets.forEach { hw ->
+            if (hw.uid in ghostOriginByUid) return@forEach
+            val comp = hw.providerInfo.provider.flattenToShortString()
+            val pendingIdx = pendingRealComponents.indexOf(comp)
+            if (pendingIdx >= 0) {
+                ghostOriginByUid[hw.uid] = realWidgetGhostKey(comp)
+                pendingRealComponents.removeAt(pendingIdx)
+            }
+        }
     }
 
     val leftRecommendation = llmSuggestion?.let { s ->
@@ -190,10 +207,63 @@ fun LockScreen(
         s.recommendation.right?.let { id -> s.selected.shortcutCandidates().firstOrNull { it.id == id } }
     }
 
-    val activeMockApp = llmSuggestion?.selected?.widgetApps?.firstOrNull { it.id == activeLlmAppId }
-    val activeRealApp = llmSuggestion?.selected?.realApps?.firstOrNull { it.firstStepId == activeLlmAppId }
+    // mock 앱 + 실제 앱을 이름 기반으로 매칭해 하나의 스트립 엔트리로 머지.
+    // 매칭되면 같은 엔트리에서 트레이 ghost(mock)와 자유 ghost(real)이 동시에 노출됨.
+    val stripEntries: List<StripAppEntry> = llmSuggestion?.let { s ->
+        val mockWithRec = s.selected.widgetApps.filter { app ->
+            s.recommendation.tray.any { id -> app.widgets.any { it.id == id } }
+        }
+        val realWithRec = s.selected.realApps.filter { ra ->
+            ra.providers.any { it.provider.flattenToShortString() in s.recommendation.floating }
+        }
+        fun normalize(text: String): String =
+            text.lowercase().filter { it.isLetterOrDigit() }
+        val takenRealPackages = HashSet<String>()
+        buildList {
+            mockWithRec.forEach { mockApp ->
+                val mockKey = normalize(mockApp.name)
+                val match = realWithRec.firstOrNull { ra ->
+                    ra.packageName !in takenRealPackages && run {
+                        val n = normalize(ra.appLabel)
+                        mockKey.isNotEmpty() && (n.contains(mockKey) || mockKey.contains(n))
+                    }
+                }
+                if (match != null) takenRealPackages += match.packageName
+                add(
+                    StripAppEntry(
+                        id = mockApp.id,
+                        name = mockApp.name,
+                        iconBg = mockApp.iconBg,
+                        iconVector = mockApp.icon,
+                        mockAppId = mockApp.id,
+                        realPackages = listOfNotNull(match?.packageName),
+                    ),
+                )
+            }
+            realWithRec.forEach { ra ->
+                if (ra.packageName in takenRealPackages) return@forEach
+                add(
+                    StripAppEntry(
+                        id = ra.firstStepId,
+                        name = ra.appLabel,
+                        iconBg = Color(0xFF424242),
+                        iconBitmap = ra.appIcon?.toBitmapSafe(),
+                        realPackages = listOf(ra.packageName),
+                    ),
+                )
+            }
+        }
+    } ?: emptyList()
 
-    // 트레이 ghost: mock 위젯 앱이 선택됐을 때만
+    val activeEntry = stripEntries.firstOrNull { it.id == activeLlmAppId }
+    val activeMockApp = activeEntry?.mockAppId?.let { mid ->
+        llmSuggestion?.selected?.widgetApps?.firstOrNull { it.id == mid }
+    }
+    val activeRealApps = activeEntry?.realPackages?.mapNotNull { pkg ->
+        llmSuggestion?.selected?.realApps?.firstOrNull { it.packageName == pkg }
+    } ?: emptyList()
+
+    // 트레이 ghost: 선택된 엔트리에 mock 앱이 매칭돼 있을 때
     val trayGhosts: List<GhostInstance> = if (llmSuggestion != null && activeMockApp != null) {
         llmSuggestion!!.recommendation.tray.mapIndexedNotNull { idx, id ->
             activeMockApp.widgets.firstOrNull { it.id == id }?.let { w ->
@@ -202,44 +272,14 @@ fun LockScreen(
         }
     } else emptyList()
 
-    // 자유 ghost: 실제 앱이 선택됐을 때만, 실제 AppWidgetProviderInfo 사용 (mock 안 씀)
+    // 자유 ghost: 선택된 엔트리에 실제 앱이 매칭돼 있을 때
     val realFloatingGhosts: List<AppWidgetProviderInfo> =
-        if (llmSuggestion != null && activeRealApp != null) {
+        if (llmSuggestion != null && activeRealApps.isNotEmpty()) {
             val recComponents = llmSuggestion!!.recommendation.floating.toHashSet()
-            activeRealApp.providers.filter {
-                it.provider.flattenToShortString() in recComponents
+            activeRealApps.flatMap { ra ->
+                ra.providers.filter { it.provider.flattenToShortString() in recComponents }
             }
         } else emptyList()
-
-    val stripEntries: List<StripAppEntry> = llmSuggestion?.let { s ->
-        buildList {
-            // mock 위젯 앱 (트레이 추천이 있는 경우만)
-            s.selected.widgetApps.forEach { app ->
-                val hasTray = s.recommendation.tray.any { id -> app.widgets.any { it.id == id } }
-                if (hasTray) add(
-                    StripAppEntry(
-                        id = app.id,
-                        name = app.name,
-                        iconBg = app.iconBg,
-                        iconVector = app.icon,
-                    ),
-                )
-            }
-            // 실제 앱 (자유 추천이 있는 경우만)
-            s.selected.realApps.forEach { ra ->
-                val components = ra.providers.map { it.provider.flattenToShortString() }
-                val hasFloating = components.any { it in s.recommendation.floating }
-                if (hasFloating) add(
-                    StripAppEntry(
-                        id = ra.firstStepId,
-                        name = ra.appLabel,
-                        iconBg = Color(0xFF424242),
-                        iconBitmap = ra.appIcon?.toBitmapSafe(),
-                    ),
-                )
-            }
-        }
-    } ?: emptyList()
 
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
@@ -480,6 +520,7 @@ fun LockScreen(
                         offset = offset,
                         onTap = {
                             consumedGhostKeys += key
+                            pendingRealComponents += component
                             onRealWidgetSelected(info)
                         },
                     )
@@ -532,13 +573,14 @@ fun LockScreen(
                         else leftShortcut?.let { activateShortcut(it) }
                     },
                 )
-                if (leftRecommendation != null &&
-                    leftShortcut?.id != leftRecommendation.id &&
-                    !leftShortcutRecDismissed
-                ) {
+                if (leftRecommendation != null && !leftShortcutRecDismissed) {
+                    val applied = leftShortcut?.id == leftRecommendation.id
                     ShortcutRecommendationBadge(
                         shortcut = leftRecommendation,
-                        onAccept = { leftShortcut = leftRecommendation },
+                        applied = applied,
+                        onToggle = {
+                            leftShortcut = if (applied) null else leftRecommendation
+                        },
                         onCancel = { leftShortcutRecDismissed = true },
                         modifier = Modifier.offset(y = (-70).dp),
                     )
@@ -557,13 +599,14 @@ fun LockScreen(
                         else rightShortcut?.let { activateShortcut(it) }
                     },
                 )
-                if (rightRecommendation != null &&
-                    rightShortcut?.id != rightRecommendation.id &&
-                    !rightShortcutRecDismissed
-                ) {
+                if (rightRecommendation != null && !rightShortcutRecDismissed) {
+                    val applied = rightShortcut?.id == rightRecommendation.id
                     ShortcutRecommendationBadge(
                         shortcut = rightRecommendation,
-                        onAccept = { rightShortcut = rightRecommendation },
+                        applied = applied,
+                        onToggle = {
+                            rightShortcut = if (applied) null else rightRecommendation
+                        },
                         onCancel = { rightShortcutRecDismissed = true },
                         modifier = Modifier.offset(y = (-70).dp),
                     )
@@ -590,6 +633,7 @@ fun LockScreen(
                         onResize = { dx, dy, ax, ay -> resizeHosted(hosted.uid, dx, dy, ax, ay) },
                         onDelete = {
                             if (selectedFloatingUid == hosted.uid) selectedFloatingUid = null
+                            releaseGhostFor(hosted.uid)
                             onRemoveHosted(hosted.uid)
                         },
                     )
