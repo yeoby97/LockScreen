@@ -1,58 +1,65 @@
 package com.example.lockscreencopy.data
 
+/**
+ * 더미 케이스의 구조:
+ * - 트레이는 권한 없는 영역이므로 mock LockWidget id 를 그대로 사용
+ * - 자유 배치 영역은 더미 위젯을 절대 사용하지 않음 (recommendation.floating 은 항상 빈 리스트).
+ *   대신 realWidgetCount 로 런타임에 실제 설치된 AppWidgetProviderInfo 를 N 개 샘플링해
+ *   recommendation.floating(component 문자열 목록)에 주입
+ * - 좌/우 바로가기는 mock 시스템 바로가기 + 설치 앱에서 LLM 가 그대로 선택
+ */
 data class DummyLlmCase(
     val title: String,
     val description: String,
     val userQuery: String,
     val selectedAppIds: List<String>,
     val recommendation: LlmRecommendation,
-    /** 자유 배치 영역에 추천할 실제 설치 앱 위젯(AppWidgetProviderInfo) 개수 — 런타임에 무작위 샘플링 */
     val realWidgetCount: Int = 0,
 )
 
-// 다양한 케이스: 트레이만, 자유배치만, 바로가기만, 가득찬 트레이, 중복 위젯,
-// 그리고 5~7개 앱이 동시 추천되는 복잡한 시나리오 포함.
 val dummyLlmCases: List<DummyLlmCase> = listOf(
     DummyLlmCase(
         title = "케이스 1: 운동할 때",
-        description = "헬스 + 음악 + 손전등 (자유배치 + 바로가기)",
+        description = "트레이=알람/음악 + 자유=실제 위젯 3 + 좌우 바로가기",
         userQuery = "운동할 때 필요한 거 배치해줘",
-        selectedAppIds = listOf("health", "ytmusic", "clock", "sys_flashlight", "sys_sound"),
+        selectedAppIds = listOf("clock", "ytmusic", "sys_flashlight", "sys_sound"),
         recommendation = LlmRecommendation(
             tray = listOf("c_alarm", "ym3"),
-            floating = listOf("h2", "ym2"),
+            floating = emptyList(),
             left = "sys_sound",
             right = "sys_flashlight",
         ),
+        realWidgetCount = 3,
     ),
     DummyLlmCase(
         title = "케이스 2: 출근길",
-        description = "캘린더 + 네이버지도 + 위치/QR (앱 3개, 위젯 7개) + 실제 앱 위젯 2개",
+        description = "트레이=캘린더/시계 + 자유=실제 위젯 4 + 위치/QR",
         userQuery = "출근길에 필요한 거 보여줘",
-        selectedAppIds = listOf("calendar", "navermap", "clock", "weather", "sys_location", "sys_qr"),
+        selectedAppIds = listOf("calendar", "clock", "sys_location", "sys_qr"),
         recommendation = LlmRecommendation(
             tray = listOf("cal_today", "cal_next", "c_world"),
-            floating = listOf("nm3", "nm1", "nm5", "cal_next2"),
+            floating = emptyList(),
             left = "sys_location",
             right = "sys_qr",
+        ),
+        realWidgetCount = 4,
+    ),
+    DummyLlmCase(
+        title = "케이스 3: 잠자기 전",
+        description = "트레이=알람/배터리/리마인더 + 자유=실제 위젯 2 + DND/다크모드",
+        userQuery = "잘 때 필요한 거",
+        selectedAppIds = listOf("clock", "battery", "reminder", "sys_dnd", "sys_dark_mode"),
+        recommendation = LlmRecommendation(
+            tray = listOf("c_alarm", "bat1", "r1"),
+            floating = emptyList(),
+            left = "sys_dnd",
+            right = "sys_dark_mode",
         ),
         realWidgetCount = 2,
     ),
     DummyLlmCase(
-        title = "케이스 3: 잠자기 전",
-        description = "알람 + 다크모드 + 방해금지 + 디지털웰빙",
-        userQuery = "잘 때 필요한 거",
-        selectedAppIds = listOf("clock", "wellbeing", "battery", "reminder", "sys_dnd", "sys_dark_mode"),
-        recommendation = LlmRecommendation(
-            tray = listOf("c_alarm", "bat1", "r1"),
-            floating = listOf("dw1", "dw2"),
-            left = "sys_dnd",
-            right = "sys_dark_mode",
-        ),
-    ),
-    DummyLlmCase(
         title = "케이스 4: 트레이만 (SMALL 4개)",
-        description = "작은 위젯 4개로 트레이 가득 채우기",
+        description = "작은 mock 위젯 4개로 트레이 가득. 자유/바로가기 없음",
         userQuery = "날씨랑 시간 한눈에",
         selectedAppIds = listOf("weather", "clock"),
         recommendation = LlmRecommendation(
@@ -64,7 +71,7 @@ val dummyLlmCases: List<DummyLlmCase> = listOf(
     ),
     DummyLlmCase(
         title = "케이스 5: 트레이만 (WIDE 2개)",
-        description = "와이드 위젯 2개로 트레이 가득",
+        description = "와이드 mock 위젯 2개로 트레이 가득",
         userQuery = "날씨 자세히",
         selectedAppIds = listOf("weather"),
         recommendation = LlmRecommendation(
@@ -75,21 +82,21 @@ val dummyLlmCases: List<DummyLlmCase> = listOf(
         ),
     ),
     DummyLlmCase(
-        title = "케이스 6: 자유배치만 (mock 3 + 실제 위젯 3)",
-        description = "자유 영역에 mock 위젯 3개 + 실제 설치 앱 위젯 3개 추천",
+        title = "케이스 6: 자유 배치만 (실제 위젯 6)",
+        description = "트레이/바로가기 없이 실제 설치 앱 위젯 6개만",
         userQuery = "큰 위젯만 여러 개",
-        selectedAppIds = listOf("navermap", "calendar", "health", "ytmusic"),
+        selectedAppIds = emptyList(),
         recommendation = LlmRecommendation(
             tray = emptyList(),
-            floating = listOf("nm5", "cal_next2", "ym1"),
+            floating = emptyList(),
             left = null,
             right = null,
         ),
-        realWidgetCount = 3,
+        realWidgetCount = 6,
     ),
     DummyLlmCase(
         title = "케이스 7: 바로가기만",
-        description = "좌/우 바로가기만 (위젯 없음)",
+        description = "좌/우 바로가기만",
         userQuery = "하단 바로가기만 추천",
         selectedAppIds = listOf("sys_flashlight", "sys_qr"),
         recommendation = LlmRecommendation(
@@ -101,62 +108,64 @@ val dummyLlmCases: List<DummyLlmCase> = listOf(
     ),
     DummyLlmCase(
         title = "케이스 8: 모든 영역 풀세팅",
-        description = "트레이 가득 + 자유배치 + 실제 위젯 2 + 좌우 바로가기",
+        description = "트레이 가득 + 실제 위젯 5 + 좌우 바로가기",
         userQuery = "전체적으로 다 채워줘",
         selectedAppIds = listOf(
-            "weather", "calendar", "battery", "navermap", "health",
+            "weather", "calendar", "battery", "health",
             "sys_flashlight", "sys_sound",
         ),
         recommendation = LlmRecommendation(
             tray = listOf("w_temp", "cal_today", "bat1", "h1"),
-            floating = listOf("nm2", "cal_next2", "h2"),
+            floating = emptyList(),
             left = "sys_sound",
             right = "sys_flashlight",
         ),
-        realWidgetCount = 2,
+        realWidgetCount = 5,
     ),
     DummyLlmCase(
-        title = "케이스 9: 중복 위젯 추천",
-        description = "같은 위젯 ID가 여러 번 (인스턴스 분리 테스트)",
+        title = "케이스 9: 중복 트레이 위젯",
+        description = "같은 mock 위젯 ID가 트레이에 여러 번 (인스턴스 분리 테스트)",
         userQuery = "같은 위젯 여러 개 쓰기",
         selectedAppIds = listOf("clock", "weather"),
         recommendation = LlmRecommendation(
             tray = listOf("c_world", "c_world", "w_temp", "w_uv"),
-            floating = listOf("w_temp2", "w_temp2"),
+            floating = emptyList(),
             left = null,
             right = null,
         ),
+        realWidgetCount = 2,
     ),
     DummyLlmCase(
-        title = "케이스 10: 회의/업무 (앱 6개)",
-        description = "캘린더 + 리마인더 + 녹음 + 통역 + 방해금지 + 절전",
+        title = "케이스 10: 회의/업무",
+        description = "트레이=캘린더/리마인더/녹음 + 실제 위젯 4 + DND/절전",
         userQuery = "회의할 때 필요한 거",
         selectedAppIds = listOf(
-            "calendar", "reminder", "voice_recorder", "interpreter", "clock",
+            "calendar", "reminder", "voice_recorder", "clock",
             "sys_dnd", "sys_power_saving",
         ),
         recommendation = LlmRecommendation(
             tray = listOf("cal_dday", "r1", "rec1", "c_world"),
-            floating = listOf("cal_next2", "r2", "rec2", "int2"),
+            floating = emptyList(),
             left = "sys_dnd",
             right = "sys_power_saving",
         ),
+        realWidgetCount = 4,
     ),
     DummyLlmCase(
-        title = "케이스 11: 여행 (앱 7개)",
-        description = "지도/통역/카메라/갤러리 + mock 위젯 + 실제 위젯 4개",
+        title = "케이스 11: 여행",
+        description = "트레이=통역/카메라/갤러리/배터리 + 실제 위젯 6 + 손전등/위치",
         userQuery = "여행 갈 때 쓸 거",
         selectedAppIds = listOf(
-            "navermap", "interpreter", "camera", "gallery", "weather", "battery",
+            "interpreter", "camera", "gallery", "battery",
             "sys_flashlight", "sys_location",
         ),
         recommendation = LlmRecommendation(
             tray = listOf("int1", "cam1", "gal1", "bat1"),
-            floating = listOf("nm5", "int2", "cam2", "w_temp2"),
+            floating = emptyList(),
             left = "sys_location",
             right = "sys_flashlight",
         ),
-        realWidgetCount = 4,
+        realWidgetCount = 6,
     ),
     DummyLlmCase(
         title = "케이스 12: 트레이 혼합 (WIDE + SMALL×2)",
@@ -172,45 +181,48 @@ val dummyLlmCases: List<DummyLlmCase> = listOf(
     ),
     DummyLlmCase(
         title = "케이스 13: 좌측만",
-        description = "우측 없이 좌측 바로가기만",
+        description = "우측 없이 좌측 바로가기 + 실제 위젯 1",
         userQuery = "왼손잡이용 단일 바로가기",
         selectedAppIds = listOf("camera", "sys_qr"),
         recommendation = LlmRecommendation(
             tray = listOf("cam1"),
-            floating = listOf("cam2"),
+            floating = emptyList(),
             left = "sys_qr",
             right = null,
         ),
+        realWidgetCount = 1,
     ),
     DummyLlmCase(
         title = "케이스 14: 미디어 감상",
-        description = "음악 + 갤러리 + 뉴스 (자유배치 위주)",
+        description = "트레이=음악/날씨 + 실제 위젯 4 + DND",
         userQuery = "느긋하게 쉴 때",
-        selectedAppIds = listOf("ytmusic", "gallery", "samsung_news", "weather", "sys_dnd"),
+        selectedAppIds = listOf("ytmusic", "weather", "sys_dnd"),
         recommendation = LlmRecommendation(
             tray = listOf("ym3", "w_temp"),
-            floating = listOf("ym1", "ym2", "gal2", "news2"),
+            floating = emptyList(),
             left = "sys_dnd",
             right = null,
         ),
+        realWidgetCount = 4,
     ),
     DummyLlmCase(
         title = "케이스 15: 건강 관리 풀세팅",
-        description = "헬스 + 웰빙 + 알람 + 리마인더 + 절전 (모든 영역 가득)",
+        description = "트레이=헬스/알람/리마인더/배터리 + 실제 위젯 4 + 절전/DND",
         userQuery = "건강 챙기는 일상",
         selectedAppIds = listOf(
-            "health", "wellbeing", "clock", "reminder", "weather", "battery",
+            "health", "clock", "reminder", "weather", "battery",
             "sys_power_saving", "sys_dnd",
         ),
         recommendation = LlmRecommendation(
             tray = listOf("h1", "c_alarm", "r1", "bat1"),
-            floating = listOf("h2", "dw1", "dw2", "r2"),
+            floating = emptyList(),
             left = "sys_power_saving",
             right = "sys_dnd",
         ),
+        realWidgetCount = 4,
     ),
     DummyLlmCase(
-        title = "케이스 16: 빈 추천 (앱만 선택)",
+        title = "케이스 16: 빈 추천",
         description = "트레이/자유배치/바로가기 모두 비어있음",
         userQuery = "아무 위젯도 배치하지 마",
         selectedAppIds = listOf("weather"),
@@ -222,22 +234,19 @@ val dummyLlmCases: List<DummyLlmCase> = listOf(
         ),
     ),
     DummyLlmCase(
-        title = "케이스 17: 실제 앱 위젯만",
-        description = "mock 위젯 없이 실제 설치 앱 위젯 6개만 자유 영역에 추천",
-        userQuery = "내가 깐 앱들 위젯으로만",
-        selectedAppIds = emptyList(),
+        title = "케이스 17: 실제 앱 위젯 풀세팅 (8개)",
+        description = "트레이 작게 + 실제 설치 앱 위젯 8개로 자유 영역 가득",
+        selectedAppIds = listOf("clock"),
+        userQuery = "내가 깐 앱들 위젯 많이",
         recommendation = LlmRecommendation(
-            tray = emptyList(),
+            tray = listOf("c_alarm", "c_world"),
             floating = emptyList(),
             left = null,
             right = null,
         ),
-        realWidgetCount = 6,
+        realWidgetCount = 8,
     ),
 )
 
-/**
- * 더미 케이스를 실제 카탈로그에 매핑해 LlmSuggestionResult 와 동일한 시뮬레이션 결과를 만든다.
- */
 fun DummyLlmCase.toSelectedFirstStep(catalog: LlmCatalog): SelectedFirstStep =
     catalog.resolveSelectedApps(selectedAppIds)

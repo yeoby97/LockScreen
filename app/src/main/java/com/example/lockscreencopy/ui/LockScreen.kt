@@ -73,12 +73,13 @@ import com.example.lockscreencopy.data.handleSystemAction
 import com.example.lockscreencopy.data.launchAppShortcut
 import com.example.lockscreencopy.ui.llm.GhostInstance
 import com.example.lockscreencopy.ui.llm.LlmAppStrip
-import com.example.lockscreencopy.ui.llm.LlmFloatingGhost
 import com.example.lockscreencopy.ui.llm.LlmRealWidgetGhost
 import com.example.lockscreencopy.ui.llm.LlmTrayGhostRow
 import com.example.lockscreencopy.ui.llm.ShortcutRecommendationBadge
+import com.example.lockscreencopy.ui.llm.StripAppEntry
 import com.example.lockscreencopy.ui.llm.ghostFloatingOffset
 import com.example.lockscreencopy.ui.llm.realWidgetGhostKey
+import com.example.lockscreencopy.ui.widget.toBitmapSafe
 import com.example.lockscreencopy.ui.picker.BottomShortcutPickerSheet
 import com.example.lockscreencopy.ui.picker.FavoriteAppsPickerScreen
 import com.example.lockscreencopy.ui.picker.FavoriteAppsSettingsSheet
@@ -189,25 +190,54 @@ fun LockScreen(
         s.recommendation.right?.let { id -> s.selected.shortcutCandidates().firstOrNull { it.id == id } }
     }
 
-    val activeApp = llmSuggestion?.selected?.widgetApps?.firstOrNull { it.id == activeLlmAppId }
-    val trayGhosts: List<GhostInstance> = if (llmSuggestion != null && activeApp != null) {
+    val activeMockApp = llmSuggestion?.selected?.widgetApps?.firstOrNull { it.id == activeLlmAppId }
+    val activeRealApp = llmSuggestion?.selected?.realApps?.firstOrNull { it.firstStepId == activeLlmAppId }
+
+    // 트레이 ghost: mock 위젯 앱이 선택됐을 때만
+    val trayGhosts: List<GhostInstance> = if (llmSuggestion != null && activeMockApp != null) {
         llmSuggestion!!.recommendation.tray.mapIndexedNotNull { idx, id ->
-            activeApp.widgets.firstOrNull { it.id == id }?.let { w ->
-                GhostInstance("tray_${activeApp.id}_${idx}_$id", w)
+            activeMockApp.widgets.firstOrNull { it.id == id }?.let { w ->
+                GhostInstance("tray_${activeMockApp.id}_${idx}_$id", w)
             }
         }
     } else emptyList()
-    val floatingGhosts: List<GhostInstance> = if (llmSuggestion != null && activeApp != null) {
-        llmSuggestion!!.recommendation.floating.mapIndexedNotNull { idx, id ->
-            activeApp.widgets.firstOrNull { it.id == id }?.let { w ->
-                GhostInstance("float_${activeApp.id}_${idx}_$id", w)
+
+    // 자유 ghost: 실제 앱이 선택됐을 때만, 실제 AppWidgetProviderInfo 사용 (mock 안 씀)
+    val realFloatingGhosts: List<AppWidgetProviderInfo> =
+        if (llmSuggestion != null && activeRealApp != null) {
+            val recComponents = llmSuggestion!!.recommendation.floating.toHashSet()
+            activeRealApp.providers.filter {
+                it.provider.flattenToShortString() in recComponents
             }
-        }
-    } else emptyList()
-    val appsWithRecs = llmSuggestion?.let { s ->
-        s.selected.widgetApps.filter { app ->
-            s.recommendation.tray.any { id -> app.widgets.any { it.id == id } } ||
-                s.recommendation.floating.any { id -> app.widgets.any { it.id == id } }
+        } else emptyList()
+
+    val stripEntries: List<StripAppEntry> = llmSuggestion?.let { s ->
+        buildList {
+            // mock 위젯 앱 (트레이 추천이 있는 경우만)
+            s.selected.widgetApps.forEach { app ->
+                val hasTray = s.recommendation.tray.any { id -> app.widgets.any { it.id == id } }
+                if (hasTray) add(
+                    StripAppEntry(
+                        id = app.id,
+                        name = app.name,
+                        iconBg = app.iconBg,
+                        iconVector = app.icon,
+                    ),
+                )
+            }
+            // 실제 앱 (자유 추천이 있는 경우만)
+            s.selected.realApps.forEach { ra ->
+                val components = ra.providers.map { it.provider.flattenToShortString() }
+                val hasFloating = components.any { it in s.recommendation.floating }
+                if (hasFloating) add(
+                    StripAppEntry(
+                        id = ra.firstStepId,
+                        name = ra.appLabel,
+                        iconBg = Color(0xFF424242),
+                        iconBitmap = ra.appIcon?.toBitmapSafe(),
+                    ),
+                )
+            }
         }
     } ?: emptyList()
 
@@ -438,37 +468,13 @@ fun LockScreen(
                 )
             }
 
+            // 자유 배치 영역 ghost: 실제 설치된 앱의 위젯만 사용 (활성 실제 앱의 추천만)
             if (isFloating) {
-                floatingGhosts.forEachIndexed { idx, ghost ->
-                    if (ghost.key in consumedGhostKeys) return@forEachIndexed
-                    val ghostOffset = ghostFloatingOffset(idx, screenWidthPx, screenHeightPx)
-                    LlmFloatingGhost(
-                        ghost = ghost,
-                        offset = ghostOffset,
-                        onTap = {
-                            addCounter++
-                            val newUid = "${ghost.widget.id}_$addCounter"
-                            floatingWidgets = floatingWidgets + FloatingWidget(
-                                uid = newUid,
-                                widget = ghost.widget,
-                                offset = ghostOffset,
-                            )
-                            consumedGhostKeys += ghost.key
-                            ghostOriginByUid[newUid] = ghost.key
-                            selectedFloatingUid = newUid
-                        },
-                    )
-                }
-
-                // 실제 앱 위젯 ghost. mock 자유 ghost 의 총 개수 뒤로 이어서 배치
-                // (소비/액티브 앱과 무관하게 위치 고정을 위해 floatingGhosts.size 사용)
-                val realStartIdx = floatingGhosts.size
-                llmSuggestion?.realWidgetProviders?.forEachIndexed { rIdx, info ->
-                    val key = realWidgetGhostKey(info)
+                realFloatingGhosts.forEachIndexed { idx, info ->
+                    val component = info.provider.flattenToShortString()
+                    val key = realWidgetGhostKey(component)
                     if (key in consumedGhostKeys) return@forEachIndexed
-                    val offset = ghostFloatingOffset(
-                        realStartIdx + rIdx, screenWidthPx, screenHeightPx,
-                    )
+                    val offset = ghostFloatingOffset(idx, screenWidthPx, screenHeightPx)
                     LlmRealWidgetGhost(
                         info = info,
                         offset = offset,
@@ -694,7 +700,7 @@ fun LockScreen(
 
         if (llmSuggestion != null) {
             LlmAppStrip(
-                apps = appsWithRecs,
+                apps = stripEntries,
                 selectedAppId = activeLlmAppId,
                 onSelect = { activeLlmAppId = it },
                 onClose = { llmSuggestion = null },

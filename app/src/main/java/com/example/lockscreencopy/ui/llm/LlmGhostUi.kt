@@ -1,6 +1,7 @@
 package com.example.lockscreencopy.ui.llm
 
 import android.appwidget.AppWidgetProviderInfo
+import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -36,6 +37,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -47,7 +49,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.lockscreencopy.model.BottomShortcut
 import com.example.lockscreencopy.model.LockWidget
-import com.example.lockscreencopy.model.WidgetApp
 import com.example.lockscreencopy.model.WidgetSize
 import com.example.lockscreencopy.ui.widget.WidgetCell
 import com.example.lockscreencopy.ui.widget.toBitmapSafe
@@ -58,13 +59,22 @@ private val GhostBorder = Color(0xFFFFA000)
 
 data class GhostInstance(val key: String, val widget: LockWidget)
 
+/** 우측 스트립에 표시할 앱 한 칸. mock 앱(vector icon) / 실제 앱(bitmap icon) 모두 지원. */
+data class StripAppEntry(
+    val id: String,
+    val name: String,
+    val iconBg: Color,
+    val iconVector: ImageVector? = null,
+    val iconBitmap: Bitmap? = null,
+)
+
 /**
  * 잠금화면 우측의 세로 앱 아이콘 스트립. 추천된 앱들의 아이콘만 나열되며,
- * 하나를 누르면 해당 앱의 위젯들이 잠금화면에 투명한 ghost 로 표시된다.
+ * 하나를 누르면 해당 앱의 위젯들이 잠금화면에 투명 ghost 로 표시된다.
  */
 @Composable
 fun LlmAppStrip(
-    apps: List<WidgetApp>,
+    apps: List<StripAppEntry>,
     selectedAppId: String?,
     onSelect: (String?) -> Unit,
     onClose: () -> Unit,
@@ -114,10 +124,21 @@ fun LlmAppStrip(
                     .clickable { onSelect(if (selected) null else app.id) },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    app.icon, contentDescription = app.name,
-                    tint = Color.White, modifier = Modifier.size(22.dp),
-                )
+                when {
+                    app.iconBitmap != null -> Image(
+                        bitmap = app.iconBitmap.asImageBitmap(),
+                        contentDescription = app.name,
+                        modifier = Modifier.size(30.dp).clip(CircleShape),
+                    )
+                    app.iconVector != null -> Icon(
+                        app.iconVector, contentDescription = app.name,
+                        tint = Color.White, modifier = Modifier.size(22.dp),
+                    )
+                    else -> Icon(
+                        Icons.Filled.Widgets, contentDescription = app.name,
+                        tint = Color.White, modifier = Modifier.size(22.dp),
+                    )
+                }
             }
         }
     }
@@ -125,6 +146,7 @@ fun LlmAppStrip(
 
 /**
  * 트레이 영역 바로 아래에 추천 위젯 ghost 를 한 줄로 표시. 탭하면 실제 트레이에 배치된다.
+ * 트레이는 권한이 없어서 mock LockWidget 을 사용.
  */
 @Composable
 fun LlmTrayGhostRow(
@@ -162,31 +184,6 @@ fun LlmTrayGhostRow(
                 }
             }
         }
-    }
-}
-
-/**
- * 자유 배치 영역의 추천 위젯 ghost. 화면 중앙부 격자 위치에 흩어져 표시되며,
- * 탭하면 그 위치에 실제 자유 배치 위젯으로 변환된다.
- */
-@Composable
-fun LlmFloatingGhost(
-    ghost: GhostInstance,
-    offset: Offset,
-    onTap: () -> Unit,
-) {
-    val w = if (ghost.widget.size == WidgetSize.WIDE) 180.dp else 100.dp
-    Box(
-        modifier = Modifier
-            .offset { IntOffset(offset.x.roundToInt(), offset.y.roundToInt()) }
-            .width(w)
-            .height(100.dp)
-            .graphicsLayer { alpha = 0.55f }
-            .clip(RoundedCornerShape(16.dp))
-            .border(1.5.dp, GhostBorder, RoundedCornerShape(16.dp))
-            .clickable { onTap() },
-    ) {
-        WidgetCell(widget = ghost.widget, modifier = Modifier.fillMaxSize())
     }
 }
 
@@ -252,8 +249,8 @@ fun ghostFloatingOffset(idx: Int, screenWidthPx: Float, screenHeightPx: Float): 
     )
 
 /**
- * 실제 설치된 앱 위젯 ghost. providerInfo 의 미리보기 이미지를 투명하게 띄우고,
- * 탭하면 실제 위젯 바인딩 흐름을 시작.
+ * 자유 배치 영역의 ghost — 실제 설치된 앱의 AppWidgetProviderInfo. 더미 위젯은 사용하지 않는다.
+ * providerInfo 의 preview/icon 을 반투명으로 띄우고, 탭하면 실제 위젯 바인딩 흐름을 시작.
  */
 @Composable
 fun LlmRealWidgetGhost(
@@ -315,5 +312,4 @@ fun LlmRealWidgetGhost(
 /**
  * 실제 앱 위젯 ghost 의 ID(consumed 추적용).
  */
-fun realWidgetGhostKey(info: AppWidgetProviderInfo): String =
-    "real_${info.provider.flattenToShortString()}"
+fun realWidgetGhostKey(component: String): String = "real_$component"

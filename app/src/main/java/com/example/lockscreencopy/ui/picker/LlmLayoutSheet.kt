@@ -1,6 +1,5 @@
 package com.example.lockscreencopy.ui.picker
 
-import android.appwidget.AppWidgetProviderInfo
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -41,9 +40,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.lockscreencopy.data.GeminiClient
 import com.example.lockscreencopy.data.LlmCatalog
+import com.example.lockscreencopy.data.LlmRecommendation
+import com.example.lockscreencopy.data.RealAppWidgets
 import com.example.lockscreencopy.data.SelectedFirstStep
 import com.example.lockscreencopy.data.buildLlmCatalog
-import com.example.lockscreencopy.data.LlmRecommendation
 import com.example.lockscreencopy.data.dummyLlmCases
 import com.example.lockscreencopy.data.toSelectedFirstStep
 import kotlinx.coroutines.Dispatchers
@@ -54,7 +54,6 @@ data class LlmSuggestionResult(
     val userQuery: String,
     val selected: SelectedFirstStep,
     val recommendation: LlmRecommendation,
-    val realWidgetProviders: List<AppWidgetProviderInfo> = emptyList(),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -142,18 +141,33 @@ fun LlmLayoutSheet(
                                 )
                                 .clickable(enabled = !loading) {
                                     val cat = catalog ?: return@clickable
-                                    val selected = case.toSelectedFirstStep(cat)
-                                    val reals = if (case.realWidgetCount > 0) {
-                                        cat.realWidgetProviders
+                                    val baseSelected = case.toSelectedFirstStep(cat)
+                                    val sampled = if (case.realWidgetCount > 0) {
+                                        cat.realApps
+                                            .flatMap { it.providers }
                                             .shuffled()
                                             .take(case.realWidgetCount)
                                     } else emptyList()
+                                    val sampledRealApps = sampled
+                                        .groupBy { it.provider.packageName }
+                                        .map { (pkg, infos) ->
+                                            val src = cat.realApps.firstOrNull { it.packageName == pkg }
+                                            RealAppWidgets(
+                                                packageName = pkg,
+                                                appLabel = src?.appLabel ?: pkg,
+                                                appIcon = src?.appIcon,
+                                                providers = infos,
+                                            )
+                                        }
+                                    val floatingComponents =
+                                        sampled.map { it.provider.flattenToShortString() }
                                     onResult(
                                         LlmSuggestionResult(
                                             userQuery = case.userQuery,
-                                            selected = selected,
-                                            recommendation = case.recommendation,
-                                            realWidgetProviders = reals,
+                                            selected = baseSelected.copy(realApps = sampledRealApps),
+                                            recommendation = case.recommendation.copy(
+                                                floating = floatingComponents,
+                                            ),
                                         ),
                                     )
                                 }
@@ -217,6 +231,7 @@ fun LlmLayoutSheet(
                                     val ids = GeminiClient.recommendApps(input, cat.firstStepEntries())
                                     val selected = cat.resolveSelectedApps(ids)
                                     if (selected.widgetApps.isEmpty() &&
+                                        selected.realApps.isEmpty() &&
                                         selected.systemShortcuts.isEmpty() &&
                                         selected.installedApps.isEmpty()
                                     ) {
@@ -228,7 +243,9 @@ fun LlmLayoutSheet(
                                     val rec = GeminiClient.recommendWidgets(
                                         userQuery = input,
                                         trayCandidates = selected.trayCandidates(),
-                                        floatingCandidates = selected.floatingCandidates(),
+                                        floatingCandidates = selected.floatingEntriesForPrompt(
+                                            context.packageManager,
+                                        ),
                                         shortcutCandidates = selected.shortcutCandidates(),
                                     )
                                     loading = false
