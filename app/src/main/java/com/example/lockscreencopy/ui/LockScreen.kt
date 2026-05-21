@@ -33,6 +33,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
@@ -69,7 +70,8 @@ import com.example.lockscreencopy.model.PlacedWidget
 import com.example.lockscreencopy.model.WidgetSize
 import com.example.lockscreencopy.data.handleSystemAction
 import com.example.lockscreencopy.data.launchAppShortcut
-import com.example.lockscreencopy.ui.llm.LlmSuggestionOverlay
+import com.example.lockscreencopy.ui.llm.LlmSidePanel
+import com.example.lockscreencopy.ui.llm.ShortcutRecommendationBadge
 import com.example.lockscreencopy.ui.picker.BottomShortcutPickerSheet
 import com.example.lockscreencopy.ui.picker.FavoriteAppsPickerScreen
 import com.example.lockscreencopy.ui.picker.FavoriteAppsSettingsSheet
@@ -152,6 +154,21 @@ fun LockScreen(
         greenBoxOffset = Offset.Zero
         selectedFloatingUid = null
         isFloating = false
+        llmSuggestion = null
+    }
+
+    LaunchedEffect(llmSuggestion) {
+        if (llmSuggestion != null && !isFloating) {
+            clockOffset = savedClockOffset
+            isFloating = true
+        }
+    }
+
+    val leftRecommendation = llmSuggestion?.let { s ->
+        s.recommendation.left?.let { id -> s.selected.shortcutCandidates().firstOrNull { it.id == id } }
+    }
+    val rightRecommendation = llmSuggestion?.let { s ->
+        s.recommendation.right?.let { id -> s.selected.shortcutCandidates().firstOrNull { it.id == id } }
     }
 
     val configuration = LocalConfiguration.current
@@ -248,6 +265,7 @@ fun LockScreen(
                             greenBoxOffset = Offset.Zero
                             selectedFloatingUid = null
                             isFloating = false
+                            llmSuggestion = null
                         },
                     )
 
@@ -396,6 +414,12 @@ fun LockScreen(
                         else leftShortcut?.let { activateShortcut(it) }
                     },
                 )
+                if (leftRecommendation != null && leftShortcut?.id != leftRecommendation.id) {
+                    ShortcutRecommendationBadge(
+                        shortcut = leftRecommendation,
+                        onAccept = { leftShortcut = leftRecommendation },
+                    )
+                }
             }
             Box(
                 modifier = Modifier
@@ -410,6 +434,12 @@ fun LockScreen(
                         else rightShortcut?.let { activateShortcut(it) }
                     },
                 )
+                if (rightRecommendation != null && rightShortcut?.id != rightRecommendation.id) {
+                    ShortcutRecommendationBadge(
+                        shortcut = rightRecommendation,
+                        onAccept = { rightShortcut = rightRecommendation },
+                    )
+                }
             }
 
             hostedWidgets.forEach { hosted ->
@@ -541,29 +571,34 @@ fun LockScreen(
         }
 
         llmSuggestion?.let { suggestion ->
-            LlmSuggestionOverlay(
+            LlmSidePanel(
                 suggestion = suggestion,
-                onCancel = { llmSuggestion = null },
-                onConfirm = { commit ->
-                    val merged = (slotWidgets + commit.tray)
-                        .let { combined ->
-                            val cap = 4
-                            val out = ArrayList<PlacedWidget>(combined.size)
-                            var used = 0
-                            for (pw in combined) {
-                                val cost = if (pw.widget.size == WidgetSize.WIDE) 2 else 1
-                                if (used + cost > cap) continue
-                                out += pw
-                                used += cost
-                            }
-                            out
-                        }
-                    slotWidgets = merged
-                    floatingWidgets = floatingWidgets + commit.floating
-                    commit.left?.let { leftShortcut = it }
-                    commit.right?.let { rightShortcut = it }
-                    llmSuggestion = null
+                onAddTrayWidget = { widget ->
+                    val needed = if (widget.size == WidgetSize.WIDE) 2 else 1
+                    val used = slotWidgets.sumOf { if (it.widget.size == WidgetSize.WIDE) 2 else 1 }
+                    if (used + needed <= 4) {
+                        addCounter++
+                        slotWidgets = slotWidgets + PlacedWidget(
+                            uid = "${widget.id}_$addCounter",
+                            widget = widget,
+                        )
+                    }
                 },
+                onAddFloatingWidget = { widget ->
+                    addCounter++
+                    floatingWidgets = floatingWidgets + FloatingWidget(
+                        uid = "${widget.id}_$addCounter",
+                        widget = widget,
+                        offset = Offset(80f + addCounter * 20f, 280f + addCounter * 20f),
+                    )
+                },
+                onApplyLeftShortcut = { sc -> leftShortcut = sc },
+                onApplyRightShortcut = { sc -> rightShortcut = sc },
+                onClose = { llmSuggestion = null },
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 6.dp, top = 70.dp, bottom = 70.dp)
+                    .graphicsLayer { alpha = editAlpha },
             )
         }
 
