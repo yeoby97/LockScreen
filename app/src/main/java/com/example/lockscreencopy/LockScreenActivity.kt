@@ -249,6 +249,44 @@ class LockScreenActivity : ComponentActivity() {
         }
     }
 
+    private fun nextHostedWidgetOffset(
+        index: Int,
+        widthPx: Int,
+        heightPx: Int,
+    ): Offset {
+        val dm = resources.displayMetrics
+        val d = dm.density
+    
+        val margin = 24f * d
+        val gap = 18f * d
+    
+        val screenW = dm.widthPixels.toFloat()
+        val screenH = dm.heightPixels.toFloat()
+    
+        val startY = screenH * 0.34f
+        val maxY = screenH * 0.72f
+    
+        val colWidth = (screenW - margin * 2f - gap) / 2f
+    
+        val isWide = widthPx > colWidth
+    
+        return if (isWide) {
+            val wideRow = index
+            Offset(
+                x = margin,
+                y = (startY + wideRow * (heightPx + gap)).coerceAtMost(maxY),
+            )
+        } else {
+            val col = index % 2
+            val row = index / 2
+    
+            Offset(
+                x = margin + col * (colWidth + gap),
+                y = (startY + row * (heightPx + gap)).coerceAtMost(maxY),
+            )
+        }
+    }
+
     private fun removeHosted(uid: String) {
         val item = hostedWidgets.firstOrNull { it.uid == uid } ?: return
         appWidgetHost.deleteAppWidgetId(item.appWidgetId)
