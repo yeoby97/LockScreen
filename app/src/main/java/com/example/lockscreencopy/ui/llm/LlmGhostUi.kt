@@ -188,7 +188,8 @@ fun LlmTrayGhostRow(
 /**
  * 좌/우 하단 바로가기 버튼 바로 위의 추천 ghost.
  * - 본체 탭: 토글 (적용 / 적용 해제). 적용 상태도 ghost 가 사라지지 않고 시각만 바뀜.
- * - 우상단 X 탭: 추천 자체 취소 (onCancel)
+ * - X 탭: 추천 자체 취소 (onCancel). X 위치는 cancelAlignment 로 조정 가능 (오른쪽
+ *   바로가기의 경우 우측 스트립과 겹치지 않도록 TopStart 권장).
  */
 @Composable
 fun ShortcutRecommendationBadge(
@@ -197,6 +198,7 @@ fun ShortcutRecommendationBadge(
     onToggle: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
+    cancelAlignment: Alignment = Alignment.TopEnd,
 ) {
     Box(modifier = modifier.size(56.dp)) {
         Box(
@@ -238,10 +240,14 @@ fun ShortcutRecommendationBadge(
                 }
             }
         }
+        val cancelOnStart = cancelAlignment == Alignment.TopStart
         Box(
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(x = 6.dp, y = (-6).dp)
+                .align(cancelAlignment)
+                .offset(
+                    x = if (cancelOnStart) (-6).dp else 6.dp,
+                    y = (-6).dp,
+                )
                 .size(18.dp)
                 .clip(CircleShape)
                 .background(Color(0xFFFF453A))

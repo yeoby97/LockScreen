@@ -180,6 +180,10 @@ fun LockScreen(
     var leftShortcutRecDismissed by remember(llmSuggestion) { mutableStateOf(false) }
     var rightShortcutRecDismissed by remember(llmSuggestion) { mutableStateOf(false) }
 
+    /** LLM 세션 시작 시점의 좌/우 바로가기 스냅샷 (취소 시 복원용) */
+    val preLlmLeftShortcut = remember(llmSuggestion) { leftShortcut }
+    val preLlmRightShortcut = remember(llmSuggestion) { rightShortcut }
+
     fun releaseGhostFor(uid: String) {
         val key = ghostOriginByUid.remove(uid) ?: return
         consumedGhostKeys.remove(key)
@@ -581,8 +585,12 @@ fun LockScreen(
                         onToggle = {
                             leftShortcut = if (applied) null else leftRecommendation
                         },
-                        onCancel = { leftShortcutRecDismissed = true },
+                        onCancel = {
+                            leftShortcut = preLlmLeftShortcut
+                            leftShortcutRecDismissed = true
+                        },
                         modifier = Modifier.offset(y = (-70).dp),
+                        cancelAlignment = Alignment.TopEnd,
                     )
                 }
             }
@@ -607,8 +615,12 @@ fun LockScreen(
                         onToggle = {
                             rightShortcut = if (applied) null else rightRecommendation
                         },
-                        onCancel = { rightShortcutRecDismissed = true },
+                        onCancel = {
+                            rightShortcut = preLlmRightShortcut
+                            rightShortcutRecDismissed = true
+                        },
                         modifier = Modifier.offset(y = (-70).dp),
+                        cancelAlignment = Alignment.TopStart,
                     )
                 }
             }
