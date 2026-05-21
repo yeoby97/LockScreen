@@ -70,8 +70,12 @@ import com.example.lockscreencopy.model.PlacedWidget
 import com.example.lockscreencopy.model.WidgetSize
 import com.example.lockscreencopy.data.handleSystemAction
 import com.example.lockscreencopy.data.launchAppShortcut
-import com.example.lockscreencopy.ui.llm.LlmSidePanel
+import com.example.lockscreencopy.ui.llm.GhostInstance
+import com.example.lockscreencopy.ui.llm.LlmAppStrip
+import com.example.lockscreencopy.ui.llm.LlmFloatingGhost
+import com.example.lockscreencopy.ui.llm.LlmTrayGhostRow
 import com.example.lockscreencopy.ui.llm.ShortcutRecommendationBadge
+import com.example.lockscreencopy.ui.llm.ghostFloatingOffset
 import com.example.lockscreencopy.ui.picker.BottomShortcutPickerSheet
 import com.example.lockscreencopy.ui.picker.FavoriteAppsPickerScreen
 import com.example.lockscreencopy.ui.picker.FavoriteAppsSettingsSheet
@@ -164,12 +168,37 @@ fun LockScreen(
         }
     }
 
+    var activeLlmAppId by remember(llmSuggestion) { mutableStateOf<String?>(null) }
+    val consumedGhostKeys = remember(llmSuggestion) { mutableStateListOf<String>() }
+
     val leftRecommendation = llmSuggestion?.let { s ->
         s.recommendation.left?.let { id -> s.selected.shortcutCandidates().firstOrNull { it.id == id } }
     }
     val rightRecommendation = llmSuggestion?.let { s ->
         s.recommendation.right?.let { id -> s.selected.shortcutCandidates().firstOrNull { it.id == id } }
     }
+
+    val activeApp = llmSuggestion?.selected?.widgetApps?.firstOrNull { it.id == activeLlmAppId }
+    val trayGhosts: List<GhostInstance> = if (llmSuggestion != null && activeApp != null) {
+        llmSuggestion!!.recommendation.tray.mapIndexedNotNull { idx, id ->
+            activeApp.widgets.firstOrNull { it.id == id }?.let { w ->
+                GhostInstance("tray_${activeApp.id}_${idx}_$id", w)
+            }
+        }
+    } else emptyList()
+    val floatingGhosts: List<GhostInstance> = if (llmSuggestion != null && activeApp != null) {
+        llmSuggestion!!.recommendation.floating.mapIndexedNotNull { idx, id ->
+            activeApp.widgets.firstOrNull { it.id == id }?.let { w ->
+                GhostInstance("float_${activeApp.id}_${idx}_$id", w)
+            }
+        }
+    } else emptyList()
+    val appsWithRecs = llmSuggestion?.let { s ->
+        s.selected.widgetApps.filter { app ->
+            s.recommendation.tray.any { id -> app.widgets.any { it.id == id } } ||
+                s.recommendation.floating.any { id -> app.widgets.any { it.id == id } }
+        }
+    } ?: emptyList()
 
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
@@ -323,6 +352,30 @@ fun LockScreen(
                                 showLockWidgetPicker = true
                             },
                         )
+                        if (isFloating && trayGhosts.any { it.key !in consumedGhostKeys }) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            val trayUsed = slotWidgets.sumOf {
+                                if (it.widget.size == WidgetSize.WIDE) 2 else 1
+                            }
+                            LlmTrayGhostRow(
+                                ghosts = trayGhosts,
+                                consumed = consumedGhostKeys.toSet(),
+                                trayUsedSpan = trayUsed,
+                                slotSize = slotSize,
+                                slotGap = slotGap,
+                                onTap = { ghost ->
+                                    val needed = if (ghost.widget.size == WidgetSize.WIDE) 2 else 1
+                                    if (trayUsed + needed <= 4) {
+                                        addCounter++
+                                        slotWidgets = slotWidgets + PlacedWidget(
+                                            uid = "${ghost.widget.id}_$addCounter",
+                                            widget = ghost.widget,
+                                        )
+                                        consumedGhostKeys += ghost.key
+                                    }
+                                },
+                            )
+                        }
                     }
 
                 }
@@ -366,6 +419,28 @@ fun LockScreen(
                         floatingWidgets = floatingWidgets.filter { it.uid != placed.uid }
                     },
                 )
+            }
+
+            if (isFloating) {
+                floatingGhosts.forEachIndexed { idx, ghost ->
+                    if (ghost.key in consumedGhostKeys) return@forEachIndexed
+                    val ghostOffset = ghostFloatingOffset(idx, screenWidthPx, screenHeightPx)
+                    LlmFloatingGhost(
+                        ghost = ghost,
+                        offset = ghostOffset,
+                        onTap = {
+                            addCounter++
+                            val newUid = "${ghost.widget.id}_$addCounter"
+                            floatingWidgets = floatingWidgets + FloatingWidget(
+                                uid = newUid,
+                                widget = ghost.widget,
+                                offset = ghostOffset,
+                            )
+                            consumedGhostKeys += ghost.key
+                            selectedFloatingUid = newUid
+                        },
+                    )
+                }
             }
 
             if (favoriteAppsEnabled && favoriteApps.isNotEmpty()) {
@@ -570,34 +645,15 @@ fun LockScreen(
             )
         }
 
-        llmSuggestion?.let { suggestion ->
-            LlmSidePanel(
-                suggestion = suggestion,
-                onAddTrayWidget = { widget ->
-                    val needed = if (widget.size == WidgetSize.WIDE) 2 else 1
-                    val used = slotWidgets.sumOf { if (it.widget.size == WidgetSize.WIDE) 2 else 1 }
-                    if (used + needed <= 4) {
-                        addCounter++
-                        slotWidgets = slotWidgets + PlacedWidget(
-                            uid = "${widget.id}_$addCounter",
-                            widget = widget,
-                        )
-                    }
-                },
-                onAddFloatingWidget = { widget ->
-                    addCounter++
-                    floatingWidgets = floatingWidgets + FloatingWidget(
-                        uid = "${widget.id}_$addCounter",
-                        widget = widget,
-                        offset = Offset(80f + addCounter * 20f, 280f + addCounter * 20f),
-                    )
-                },
-                onApplyLeftShortcut = { sc -> leftShortcut = sc },
-                onApplyRightShortcut = { sc -> rightShortcut = sc },
+        if (llmSuggestion != null) {
+            LlmAppStrip(
+                apps = appsWithRecs,
+                selectedAppId = activeLlmAppId,
+                onSelect = { activeLlmAppId = it },
                 onClose = { llmSuggestion = null },
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .padding(end = 6.dp, top = 70.dp, bottom = 70.dp)
+                    .padding(end = 6.dp, top = 60.dp, bottom = 60.dp)
                     .graphicsLayer { alpha = editAlpha },
             )
         }
