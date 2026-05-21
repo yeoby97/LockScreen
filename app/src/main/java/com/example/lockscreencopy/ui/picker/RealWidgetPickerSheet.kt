@@ -7,7 +7,7 @@ import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,26 +19,26 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Widgets
-import androidx.compose.material3.Divider
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,14 +53,21 @@ import androidx.compose.ui.unit.sp
 import com.example.lockscreencopy.ui.widget.toBitmapSafe
 import kotlin.math.roundToInt
 
-private data class WidgetGroup(
+private data class WidgetItem(
+    val providerInfo: AppWidgetProviderInfo,
     val packageName: String,
     val appLabel: String,
     val appIcon: Drawable?,
-    val providers: List<AppWidgetProviderInfo>,
+    val widgetLabel: String,
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
+private enum class WidgetFilter(val label: String) {
+    All("전체"),
+    Frequent("자주 사용"),
+    Recent("최근 사용"),
+    HasWidgets("위젯 보유 앱"),
+}
+
 @Composable
 fun RealWidgetPickerSheet(
     appWidgetManager: AppWidgetManager,
@@ -71,16 +78,38 @@ fun RealWidgetPickerSheet(
     val pm = ctx.packageManager
     val densityDpi = LocalDensity.current.density.let { (it * 160f).roundToInt() }
 
-    val groups = remember(appWidgetManager) {
+    val widgets = remember(appWidgetManager) {
         appWidgetManager.installedProviders
-            .groupBy { it.provider.packageName }
-            .map { (pkg, infos) ->
-                val (label, icon) = appInfo(pm, pkg)
-                WidgetGroup(pkg, label, icon, infos)
+            .map { info ->
+                val pkg = info.provider.packageName
+                val (appLabel, appIcon) = appInfo(pm, pkg)
+                val widgetLabel = runCatching { info.loadLabel(pm).toString() }
+                    .getOrDefault(info.provider.shortClassName)
+                WidgetItem(info, pkg, appLabel, appIcon, widgetLabel)
             }
-            .sortedBy { it.appLabel.lowercase() }
+            .sortedWith(compareBy<WidgetItem> { it.appLabel.lowercase() }.thenBy { it.widgetLabel.lowercase() })
     }
-    val expanded = remember { mutableStateMapOf<String, Boolean>() }
+
+    var query by rememberSaveable { mutableStateOf("") }
+    var filter by rememberSaveable { mutableStateOf(WidgetFilter.All) }
+    var multiSelectMode by rememberSaveable { mutableStateOf(false) }
+    var selectedKeys by remember { mutableStateOf(setOf<String>()) }
+    var previewTarget by remember { mutableStateOf<WidgetItem?>(null) }
+
+    val filteredWidgets = remember(widgets, query, filter) {
+        widgets.filter { item ->
+            val matchesQuery = query.isBlank() ||
+                item.appLabel.contains(query, ignoreCase = true) ||
+                item.widgetLabel.contains(query, ignoreCase = true)
+            val matchesFilter = when (filter) {
+                WidgetFilter.All -> true
+                WidgetFilter.Frequent -> true
+                WidgetFilter.Recent -> true
+                WidgetFilter.HasWidgets -> true
+            }
+            matchesQuery && matchesFilter
+        }
+    }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
@@ -88,42 +117,103 @@ fun RealWidgetPickerSheet(
         sheetState = sheetState,
         containerColor = Color(0xFF1C1C1E),
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp)) {
             Text(
                 "앱 위젯",
-                fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
             )
-            if (groups.isEmpty()) {
-                Text(
-                    "설치된 위젯이 없습니다",
-                    color = Color(0xFF8E8E93), fontSize = 14.sp,
-                    modifier = Modifier.padding(16.dp),
-                )
-            }
-            LazyColumn(modifier = Modifier.fillMaxWidth().height(560.dp)) {
-                items(groups, key = { it.packageName }) { group ->
-                    val isOpen = expanded[group.packageName] ?: false
-                    AppHeaderRow(
-                        group = group,
-                        isOpen = isOpen,
-                        onToggle = { expanded[group.packageName] = !isOpen },
-                    )
-                    if (isOpen) {
-                        WidgetPreviewRow(
-                            providers = group.providers,
-                            pm = pm,
-                            ctx = ctx,
-                            densityDpi = densityDpi,
-                            onSelect = onSelect,
-                        )
-                    }
-                    Divider(
-                        color = Color.White.copy(alpha = 0.08f), thickness = 0.5.dp,
-                        modifier = Modifier.padding(start = 16.dp),
+
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = Color(0xFFE5E5EA)) },
+                placeholder = { Text("앱명/위젯명 검색", color = Color(0xFFC7C7CC)) },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .height(56.dp),
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                WidgetFilter.values().forEach { option ->
+                    FilterChip(
+                        selected = filter == option,
+                        onClick = { filter = option },
+                        label = { Text(option.label) },
                     )
                 }
             }
+
+            if (filteredWidgets.isEmpty()) {
+                Text(
+                    "검색 결과가 없습니다",
+                    color = Color(0xFFE5E5EA),
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(16.dp),
+                )
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 168.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(560.dp)
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(filteredWidgets, key = { it.providerInfo.provider.flattenToShortString() }) { item ->
+                        val key = item.providerInfo.provider.flattenToShortString()
+                        WidgetPreviewCard(
+                            item = item,
+                            pm = pm,
+                            ctx = ctx,
+                            densityDpi = densityDpi,
+                            selected = selectedKeys.contains(key),
+                            onClick = {
+                                if (multiSelectMode) {
+                                    selectedKeys = if (selectedKeys.contains(key)) selectedKeys - key else selectedKeys + key
+                                } else {
+                                    onSelect(item.providerInfo)
+                                }
+                            },
+                            onLongClick = {
+                                multiSelectMode = true
+                                previewTarget = item
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    previewTarget?.let { item ->
+        ModalBottomSheet(
+            onDismissRequest = { previewTarget = null },
+            containerColor = Color(0xFF1C1C1E),
+        ) {
+            WidgetPreviewCard(
+                item = item,
+                pm = pm,
+                ctx = ctx,
+                densityDpi = densityDpi,
+                selected = false,
+                onClick = { onSelect(item.providerInfo) },
+                onLongClick = {},
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                previewHeight = 220.dp,
+            )
         }
     }
 }
@@ -131,120 +221,80 @@ fun RealWidgetPickerSheet(
 private fun appInfo(pm: PackageManager, pkg: String): Pair<String, Drawable?> {
     return try {
         val info = pm.getApplicationInfo(pkg, 0)
-        val label = pm.getApplicationLabel(info).toString()
-        val icon = runCatching { pm.getApplicationIcon(info) }.getOrNull()
-        label to icon
+        pm.getApplicationLabel(info).toString() to runCatching { pm.getApplicationIcon(info) }.getOrNull()
     } catch (_: Exception) {
         pkg to null
     }
 }
 
 @Composable
-private fun AppHeaderRow(group: WidgetGroup, isOpen: Boolean, onToggle: () -> Unit) {
-    val iconBmp = remember(group.packageName) { group.appIcon?.toBitmapSafe() }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onToggle)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier.size(40.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.1f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (iconBmp != null) {
-                Image(
-                    bitmap = iconBmp.asImageBitmap(),
-                    contentDescription = group.appLabel,
-                    modifier = Modifier.size(32.dp).clip(CircleShape),
-                )
-            } else {
-                Icon(Icons.Filled.Widgets, null, tint = Color.White, modifier = Modifier.size(22.dp))
-            }
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(group.appLabel, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            Text(
-                "${group.providers.size}개 위젯",
-                color = Color(0xFF8E8E93), fontSize = 12.sp,
-            )
-        }
-        Icon(
-            if (isOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-            contentDescription = null, tint = Color(0xFF8E8E93),
-        )
-    }
-}
-
-@Composable
-private fun WidgetPreviewRow(
-    providers: List<AppWidgetProviderInfo>,
-    pm: PackageManager,
-    ctx: android.content.Context,
-    densityDpi: Int,
-    onSelect: (AppWidgetProviderInfo) -> Unit,
-) {
-    LazyRow(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(providers, key = { it.provider.flattenToShortString() }) { info ->
-            WidgetPreviewCard(info = info, pm = pm, ctx = ctx, densityDpi = densityDpi, onClick = { onSelect(info) })
-        }
-    }
-}
-
-@Composable
 private fun WidgetPreviewCard(
-    info: AppWidgetProviderInfo,
+    item: WidgetItem,
     pm: PackageManager,
     ctx: android.content.Context,
     densityDpi: Int,
+    selected: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    previewHeight: androidx.compose.ui.unit.Dp = 120.dp,
 ) {
-    val previewBmp = remember(info.provider.flattenToShortString()) {
-        val preview: Drawable? = runCatching { info.loadPreviewImage(ctx, densityDpi) }.getOrNull()
-            ?: runCatching { info.loadIcon(ctx, densityDpi) }.getOrNull()
+    val previewBmp = remember(item.providerInfo.provider.flattenToShortString()) {
+        val preview = runCatching { item.providerInfo.loadPreviewImage(ctx, densityDpi) }.getOrNull()
+            ?: runCatching { item.providerInfo.loadIcon(ctx, densityDpi) }.getOrNull()
         preview?.toBitmapSafe()
     }
-    val label = remember(info.provider.flattenToShortString()) {
-        runCatching { info.loadLabel(pm).toString() }.getOrDefault(info.provider.shortClassName)
-    }
-    val sizeText = "${info.minWidth}×${info.minHeight}"
+    val appIconBmp = remember(item.packageName) { item.appIcon?.toBitmapSafe() }
+    val sizeText = "${item.providerInfo.minWidth}×${item.providerInfo.minHeight}"
 
     Column(
-        modifier = Modifier
-            .width(160.dp)
+        modifier = modifier
             .clip(RoundedCornerShape(14.dp))
             .background(Color(0xFF2C2C2E))
-            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .padding(8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .border(1.dp, if (selected) Color(0xFF64D2FF) else Color.White.copy(alpha = 0.15f), RoundedCornerShape(14.dp))
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(10.dp),
     ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(48.dp)) {
+            Box(
+                modifier = Modifier.size(32.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (appIconBmp != null) {
+                    Image(bitmap = appIconBmp.asImageBitmap(), contentDescription = item.appLabel, modifier = Modifier.size(24.dp))
+                } else {
+                    Icon(Icons.Filled.Widgets, null, tint = Color(0xFFE5E5EA), modifier = Modifier.size(20.dp))
+                }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(item.appLabel, color = Color.White, fontSize = 14.sp, maxLines = 1)
+                Text(item.widgetLabel, color = Color(0xFFE5E5EA), fontSize = 12.sp, maxLines = 1)
+            }
+            if (selected) {
+                Icon(Icons.Filled.Check, contentDescription = null, tint = Color(0xFF64D2FF), modifier = Modifier.size(20.dp))
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
         Box(
-            modifier = Modifier.fillMaxWidth().height(110.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(previewHeight)
                 .clip(RoundedCornerShape(10.dp))
-                .background(Color.White.copy(alpha = 0.06f)),
+                .background(Color.White.copy(alpha = 0.10f)),
             contentAlignment = Alignment.Center,
         ) {
             if (previewBmp != null) {
                 Image(
                     bitmap = previewBmp.asImageBitmap(),
-                    contentDescription = label,
+                    contentDescription = item.widgetLabel,
                     modifier = Modifier.fillMaxSize().padding(6.dp),
                 )
             } else {
-                Icon(Icons.Filled.Widgets, null, tint = Color(0xFF8E8E93), modifier = Modifier.size(36.dp))
+                Icon(Icons.Filled.Widgets, contentDescription = null, tint = Color(0xFFE5E5EA), modifier = Modifier.size(36.dp))
             }
         }
         Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            label, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium,
-            maxLines = 1,
-        )
-        Text(sizeText, color = Color(0xFF8E8E93), fontSize = 11.sp)
+        Text(sizeText, color = Color(0xFFD1D1D6), fontSize = 12.sp)
     }
 }
