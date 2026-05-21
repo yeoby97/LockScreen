@@ -727,7 +727,7 @@ private fun ProviderChip(
             .padding(horizontal = 8.dp, vertical = 5.dp),
     ) {
         Text(
-            label = label.take(18),
+            text = label.take(18),
             color = Color.White,
             fontSize = 10.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
