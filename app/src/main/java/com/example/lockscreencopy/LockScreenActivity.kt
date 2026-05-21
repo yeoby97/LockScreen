@@ -31,35 +31,57 @@ class LockScreenActivity : ComponentActivity() {
 
     private val hostedWidgets: SnapshotStateList<HostedAppWidget> = mutableStateListOf()
 
+    // AI 추천에서 실제 앱 위젯을 여러 개 한 번에 선택할 수 있으므로 순차 처리용 큐
+    private val pendingProviderQueue = ArrayDeque<AppWidgetProviderInfo>()
+    private var widgetFlowInProgress = false
+
     private val bindWidgetLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
         val id = result.data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
-        if (result.resultCode == Activity.RESULT_OK && id != -1) configureOrAdd(id)
-        else if (id != -1) appWidgetHost.deleteAppWidgetId(id)
+
+        if (result.resultCode == Activity.RESULT_OK && id != -1) {
+            configureOrAdd(id)
+        } else {
+            if (id != -1) appWidgetHost.deleteAppWidgetId(id)
+            finishWidgetFlow()
+        }
     }
 
     private val configureWidgetLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
         val id = result.data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
-        if (result.resultCode == Activity.RESULT_OK && id != -1) addHostedWidget(id)
-        else if (id != -1) appWidgetHost.deleteAppWidgetId(id)
+
+        if (result.resultCode == Activity.RESULT_OK && id != -1) {
+            addHostedWidget(id)
+        } else {
+            if (id != -1) appWidgetHost.deleteAppWidgetId(id)
+        }
+
+        finishWidgetFlow()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         keyguardManager = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
         appWidgetManager = AppWidgetManager.getInstance(this)
         appWidgetHost = AppWidgetHost(this, HOST_ID)
+
         setShowWhenLocked(true)
         setTurnScreenOn(true)
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             keyguardManager.requestDismissKeyguard(this, null)
         }
+
         setContent {
             LockScreenCopyTheme {
-                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                ) {
                     LockScreen(
                         onUnlock = { unlockDevice() },
                         hostedWidgets = hostedWidgets,
@@ -75,12 +97,18 @@ class LockScreenActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        try { appWidgetHost.startListening() } catch (_: Exception) {}
+        try {
+            appWidgetHost.startListening()
+        } catch (_: Exception) {
+        }
     }
 
     override fun onStop() {
         super.onStop()
-        try { appWidgetHost.stopListening() } catch (_: Exception) {}
+        try {
+            appWidgetHost.stopListening()
+        } catch (_: Exception) {
+        }
     }
 
     private fun unlockDevice() {
@@ -116,13 +144,25 @@ class LockScreenActivity : ComponentActivity() {
     }
 
     private fun onProviderSelected(info: AppWidgetProviderInfo) {
+        if (widgetFlowInProgress) {
+            pendingProviderQueue.addLast(info)
+            return
+        }
+
+        widgetFlowInProgress = true
+        startProviderFlow(info)
+    }
+
+    private fun startProviderFlow(info: AppWidgetProviderInfo) {
         val appWidgetId = appWidgetHost.allocateAppWidgetId()
         val (minWdp, minHdp) = resolveWidgetSizeDp(info)
         val options = sizeOptionsBundle(minWdp, minHdp)
 
         val bound = try {
             appWidgetManager.bindAppWidgetIdIfAllowed(appWidgetId, info.provider, options)
-        } catch (_: Exception) { false }
+        } catch (_: Exception) {
+            false
+        }
 
         if (bound) {
             configureOrAdd(appWidgetId)
@@ -134,31 +174,41 @@ class LockScreenActivity : ComponentActivity() {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, info.provider)
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_OPTIONS, options)
         }
+
         try {
             bindWidgetLauncher.launch(bindIntent)
         } catch (_: ActivityNotFoundException) {
             Toast.makeText(this, "위젯 바인딩을 처리할 수 없습니다", Toast.LENGTH_SHORT).show()
             appWidgetHost.deleteAppWidgetId(appWidgetId)
+            finishWidgetFlow()
         }
     }
 
     private fun configureOrAdd(appWidgetId: Int) {
         val info = appWidgetManager.getAppWidgetInfo(appWidgetId) ?: run {
-            appWidgetHost.deleteAppWidgetId(appWidgetId); return
-        }
-        val configure = info.configure
-        if (configure == null) {
-            addHostedWidget(appWidgetId)
+            appWidgetHost.deleteAppWidgetId(appWidgetId)
+            finishWidgetFlow()
             return
         }
+
+        val configure = info.configure
+
+        if (configure == null) {
+            addHostedWidget(appWidgetId)
+            finishWidgetFlow()
+            return
+        }
+
         val configureIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
             component = configure
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
         }
+
         try {
             configureWidgetLauncher.launch(configureIntent)
         } catch (_: Exception) {
             addHostedWidget(appWidgetId)
+            finishWidgetFlow()
         }
     }
 
@@ -166,8 +216,14 @@ class LockScreenActivity : ComponentActivity() {
         val info = appWidgetManager.getAppWidgetInfo(appWidgetId) ?: return
         val (minWdp, minHdp) = resolveWidgetSizeDp(info)
         val options = sizeOptionsBundle(minWdp, minHdp)
-        try { appWidgetManager.updateAppWidgetOptions(appWidgetId, options) } catch (_: Exception) {}
+
+        try {
+            appWidgetManager.updateAppWidgetOptions(appWidgetId, options)
+        } catch (_: Exception) {
+        }
+
         val d = resources.displayMetrics.density
+
         hostedWidgets.add(
             HostedAppWidget(
                 uid = "hosted_${appWidgetId}_${System.currentTimeMillis()}",
@@ -175,9 +231,18 @@ class LockScreenActivity : ComponentActivity() {
                 providerInfo = info,
                 widthPx = (minWdp * d).toInt(),
                 heightPx = (minHdp * d).toInt(),
-                offset = Offset(200f, 600f),
+                offset = Offset(200f + hostedWidgets.size * 30f, 600f + hostedWidgets.size * 30f),
             ),
         )
+    }
+
+    private fun finishWidgetFlow() {
+        widgetFlowInProgress = false
+
+        if (pendingProviderQueue.isNotEmpty()) {
+            val next = pendingProviderQueue.removeFirst()
+            onProviderSelected(next)
+        }
     }
 
     private fun removeHosted(uid: String) {
@@ -186,5 +251,7 @@ class LockScreenActivity : ComponentActivity() {
         hostedWidgets.remove(item)
     }
 
-    companion object { const val HOST_ID = 1024 }
+    companion object {
+        const val HOST_ID = 1024
+    }
 }
