@@ -111,7 +111,7 @@ fun LockScreen(
     hostedWidgets: SnapshotStateList<HostedAppWidget> = mutableStateListOf(),
     appWidgetHost: AppWidgetHost? = null,
     appWidgetManager: AppWidgetManager? = null,
-    onRealWidgetSelected: (AppWidgetProviderInfo) -> Unit = {},
+    onRealWidgetSelected: (AppWidgetProviderInfo, Offset) -> Unit = { _, _ -> },
     onRemoveHosted: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -524,6 +524,9 @@ fun LockScreen(
                     val slotRowLeft = (screenWidthPx - slotRowWidth) / 2f
                     val slotRowTop = screenHeightPx * 0.32f
                     add(RectBounds(slotRowLeft, slotRowTop, slotRowLeft + slotRowWidth, slotRowTop + slotSizePx))
+                    // 상단 시계 영역 및 하단 LockStarBar/바로가기 영역도 점유영역으로 간주
+                    add(RectBounds(screenWidthPx * 0.2f, screenHeightPx * 0.08f, screenWidthPx * 0.8f, screenHeightPx * 0.3f))
+                    add(RectBounds(screenWidthPx * 0.12f, screenHeightPx * 0.78f, screenWidthPx * 0.88f, screenHeightPx * 0.96f))
                     addAll(floatingWidgets.map { placed ->
                         val width = with(density) {
                             (if (placed.widget.size == WidgetSize.WIDE) 180.dp else 100.dp).toPx() * placed.scaleX
@@ -574,10 +577,12 @@ fun LockScreen(
                     LlmRealWidgetGhost(
                         info = info,
                         offset = offset,
+                        width = with(density) { (rect.right - rect.left).toDp() },
+                        height = with(density) { (rect.bottom - rect.top).toDp() },
                         onTap = {
                             consumedGhostKeys += key
                             pendingRealComponents += component
-                            onRealWidgetSelected(info)
+                            onRealWidgetSelected(info, offset)
                         },
                     )
                 }
@@ -825,7 +830,7 @@ fun LockScreen(
                 onDismiss = { showRealWidgetPicker = false },
                 onSelect = { info ->
                     showRealWidgetPicker = false
-                    onRealWidgetSelected(info)
+                    onRealWidgetSelected(info, Offset(screenWidthPx * 0.2f, screenHeightPx * 0.45f))
                 },
             )
         }
