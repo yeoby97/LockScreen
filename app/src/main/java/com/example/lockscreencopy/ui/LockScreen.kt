@@ -74,7 +74,6 @@ import com.example.lockscreencopy.data.launchAppShortcut
 import com.example.lockscreencopy.ui.llm.GhostInstance
 import com.example.lockscreencopy.ui.llm.LlmAppStrip
 import com.example.lockscreencopy.ui.llm.LlmRealWidgetGhost
-import com.example.lockscreencopy.ui.llm.LlmTrayGhostRow
 import com.example.lockscreencopy.ui.llm.ShortcutRecommendationBadge
 import com.example.lockscreencopy.ui.llm.StripAppEntry
 import com.example.lockscreencopy.ui.llm.ghostFloatingOffset
@@ -439,33 +438,16 @@ fun LockScreen(
                                 addTarget = AddTarget.SLOT
                                 showLockWidgetPicker = true
                             },
+                            trayGhosts = trayGhosts,
+                            consumedGhostKeys = consumedGhostKeys.toSet(),
+                            onGhostTap = { ghost ->
+                                addCounter++
+                                val newUid = "${ghost.widget.id}_$addCounter"
+                                slotWidgets = slotWidgets + PlacedWidget(uid = newUid, widget = ghost.widget)
+                                consumedGhostKeys += ghost.key
+                                ghostOriginByUid[newUid] = ghost.key
+                            },
                         )
-                        if (isFloating && trayGhosts.any { it.key !in consumedGhostKeys }) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            val trayUsed = slotWidgets.sumOf {
-                                if (it.widget.size == WidgetSize.WIDE) 2 else 1
-                            }
-                            LlmTrayGhostRow(
-                                ghosts = trayGhosts,
-                                consumed = consumedGhostKeys.toSet(),
-                                trayUsedSpan = trayUsed,
-                                slotSize = slotSize,
-                                slotGap = slotGap,
-                                onTap = { ghost ->
-                                    val needed = if (ghost.widget.size == WidgetSize.WIDE) 2 else 1
-                                    if (trayUsed + needed <= 4) {
-                                        addCounter++
-                                        val newUid = "${ghost.widget.id}_$addCounter"
-                                        slotWidgets = slotWidgets + PlacedWidget(
-                                            uid = newUid,
-                                            widget = ghost.widget,
-                                        )
-                                        consumedGhostKeys += ghost.key
-                                        ghostOriginByUid[newUid] = ghost.key
-                                    }
-                                },
-                            )
-                        }
                     }
 
                 }
