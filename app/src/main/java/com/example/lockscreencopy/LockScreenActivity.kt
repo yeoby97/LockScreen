@@ -30,13 +30,17 @@ class LockScreenActivity : ComponentActivity() {
     private lateinit var appWidgetHost: AppWidgetHost
 
     private val hostedWidgets: SnapshotStateList<HostedAppWidget> = mutableStateListOf()
+    private val pendingOffsetsByWidgetId = mutableMapOf<Int, Offset>()
 
     private val bindWidgetLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
         val id = result.data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
         if (result.resultCode == Activity.RESULT_OK && id != -1) configureOrAdd(id)
-        else if (id != -1) appWidgetHost.deleteAppWidgetId(id)
+        else if (id != -1) {
+            pendingOffsetsByWidgetId.remove(id)
+            appWidgetHost.deleteAppWidgetId(id)
+        }
     }
 
     private val configureWidgetLauncher = registerForActivityResult(
@@ -44,7 +48,10 @@ class LockScreenActivity : ComponentActivity() {
     ) { result ->
         val id = result.data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
         if (result.resultCode == Activity.RESULT_OK && id != -1) addHostedWidget(id)
-        else if (id != -1) appWidgetHost.deleteAppWidgetId(id)
+        else if (id != -1) {
+            pendingOffsetsByWidgetId.remove(id)
+            appWidgetHost.deleteAppWidgetId(id)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -115,8 +122,9 @@ class LockScreenActivity : ComponentActivity() {
         putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, minHdp)
     }
 
-    private fun onProviderSelected(info: AppWidgetProviderInfo) {
+    private fun onProviderSelected(info: AppWidgetProviderInfo, preferredOffset: Offset) {
         val appWidgetId = appWidgetHost.allocateAppWidgetId()
+        pendingOffsetsByWidgetId[appWidgetId] = preferredOffset
         val (minWdp, minHdp) = resolveWidgetSizeDp(info)
         val options = sizeOptionsBundle(minWdp, minHdp)
 
@@ -138,12 +146,14 @@ class LockScreenActivity : ComponentActivity() {
             bindWidgetLauncher.launch(bindIntent)
         } catch (_: ActivityNotFoundException) {
             Toast.makeText(this, "위젯 바인딩을 처리할 수 없습니다", Toast.LENGTH_SHORT).show()
+            pendingOffsetsByWidgetId.remove(appWidgetId)
             appWidgetHost.deleteAppWidgetId(appWidgetId)
         }
     }
 
     private fun configureOrAdd(appWidgetId: Int) {
         val info = appWidgetManager.getAppWidgetInfo(appWidgetId) ?: run {
+            pendingOffsetsByWidgetId.remove(appWidgetId)
             appWidgetHost.deleteAppWidgetId(appWidgetId); return
         }
         val configure = info.configure
@@ -168,6 +178,7 @@ class LockScreenActivity : ComponentActivity() {
         val options = sizeOptionsBundle(minWdp, minHdp)
         try { appWidgetManager.updateAppWidgetOptions(appWidgetId, options) } catch (_: Exception) {}
         val d = resources.displayMetrics.density
+        val preferredOffset = pendingOffsetsByWidgetId.remove(appWidgetId) ?: Offset(200f, 600f)
         hostedWidgets.add(
             HostedAppWidget(
                 uid = "hosted_${appWidgetId}_${System.currentTimeMillis()}",
@@ -175,7 +186,7 @@ class LockScreenActivity : ComponentActivity() {
                 providerInfo = info,
                 widthPx = (minWdp * d).toInt(),
                 heightPx = (minHdp * d).toInt(),
-                offset = Offset(200f, 600f),
+                offset = preferredOffset,
             ),
         )
     }

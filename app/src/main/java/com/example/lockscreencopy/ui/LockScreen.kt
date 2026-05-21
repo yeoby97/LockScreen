@@ -74,9 +74,10 @@ import com.example.lockscreencopy.data.launchAppShortcut
 import com.example.lockscreencopy.ui.llm.GhostInstance
 import com.example.lockscreencopy.ui.llm.LlmAppStrip
 import com.example.lockscreencopy.ui.llm.LlmRealWidgetGhost
+import com.example.lockscreencopy.ui.llm.RectBounds
 import com.example.lockscreencopy.ui.llm.ShortcutRecommendationBadge
 import com.example.lockscreencopy.ui.llm.StripAppEntry
-import com.example.lockscreencopy.ui.llm.ghostFloatingOffset
+import com.example.lockscreencopy.ui.llm.placeGhostRects
 import com.example.lockscreencopy.ui.llm.realWidgetGhostKey
 import com.example.lockscreencopy.ui.widget.toBitmapSafe
 import com.example.lockscreencopy.ui.picker.BottomShortcutPickerSheet
@@ -109,7 +110,7 @@ fun LockScreen(
     hostedWidgets: SnapshotStateList<HostedAppWidget> = mutableStateListOf(),
     appWidgetHost: AppWidgetHost? = null,
     appWidgetManager: AppWidgetManager? = null,
-    onRealWidgetSelected: (AppWidgetProviderInfo) -> Unit = {},
+    onRealWidgetSelected: (AppWidgetProviderInfo, Offset) -> Unit = { _, _ -> },
     onRemoveHosted: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -319,6 +320,8 @@ fun LockScreen(
 
     val screenWidthPx = with(density) { screenWidth.toPx() }
     val screenHeightPx = with(density) { screenHeight.toPx() }
+    val fallbackRealGhostWidthPx = with(density) { 150.dp.toPx() }
+    val fallbackRealGhostHeightPx = with(density) { 110.dp.toPx() }
 
     val slotGap = 8.dp
     val slotSize = screenWidth * 0.1f
@@ -496,18 +499,72 @@ fun LockScreen(
 
             // 자유 배치 영역 ghost: 실제 설치된 앱의 위젯만 사용 (활성 실제 앱의 추천만)
             if (isFloating) {
-                realFloatingGhosts.forEachIndexed { idx, info ->
+                val occupiedRects = buildList {
+                    val slotSizePx = with(density) { slotSize.toPx() }
+                    val slotGapPx = with(density) { slotGap.toPx() }
+                    val slotRowWidth = slotSizePx * 4f + slotGapPx * 3f
+                    val slotRowLeft = (screenWidthPx - slotRowWidth) / 2f
+                    val slotRowTop = screenHeightPx * 0.32f
+                    add(RectBounds(slotRowLeft, slotRowTop, slotRowLeft + slotRowWidth, slotRowTop + slotSizePx))
+                    // 상단 시계 영역 및 하단 LockStarBar/바로가기 영역도 점유영역으로 간주
+                    add(RectBounds(screenWidthPx * 0.2f, screenHeightPx * 0.08f, screenWidthPx * 0.8f, screenHeightPx * 0.3f))
+                    add(RectBounds(screenWidthPx * 0.12f, screenHeightPx * 0.78f, screenWidthPx * 0.88f, screenHeightPx * 0.96f))
+                    addAll(floatingWidgets.map { placed ->
+                        val width = with(density) {
+                            (if (placed.widget.size == WidgetSize.WIDE) 180.dp else 100.dp).toPx() * placed.scaleX
+                        }
+                        val height = with(density) { 100.dp.toPx() * placed.scaleY }
+                        RectBounds(
+                            left = placed.offset.x,
+                            top = placed.offset.y,
+                            right = placed.offset.x + width,
+                            bottom = placed.offset.y + height,
+                        )
+                    })
+                    addAll(hostedWidgets.map { hosted ->
+                        RectBounds(
+                            left = hosted.offset.x,
+                            top = hosted.offset.y,
+                            right = hosted.offset.x + hosted.widthPx * hosted.scaleX,
+                            bottom = hosted.offset.y + hosted.heightPx * hosted.scaleY,
+                        )
+                    })
+                }
+                val visibleRealGhosts = realFloatingGhosts.filter {
+                    realWidgetGhostKey(it.provider.flattenToShortString()) !in consumedGhostKeys
+                }
+                val plannedGhostRects = placeGhostRects(
+                    ghostSizes = visibleRealGhosts.map { info ->
+                        val minWdp = info.minWidth.coerceAtLeast(120)
+                        val minHdp = info.minHeight.coerceAtLeast(80)
+                        val w = with(density) { minWdp.dp.toPx() }.coerceIn(
+                            minimumValue = fallbackRealGhostWidthPx * 0.8f,
+                            maximumValue = screenWidthPx * 0.72f,
+                        )
+                        val h = with(density) { minHdp.dp.toPx() }.coerceIn(
+                            minimumValue = fallbackRealGhostHeightPx * 0.8f,
+                            maximumValue = screenHeightPx * 0.35f,
+                        )
+                        w to h
+                    },
+                    screenWidthPx = screenWidthPx,
+                    screenHeightPx = screenHeightPx,
+                    occupied = occupiedRects,
+                )
+                visibleRealGhosts.forEachIndexed { idx, info ->
                     val component = info.provider.flattenToShortString()
                     val key = realWidgetGhostKey(component)
-                    if (key in consumedGhostKeys) return@forEachIndexed
-                    val offset = ghostFloatingOffset(idx, screenWidthPx, screenHeightPx)
+                    val rect = plannedGhostRects[idx]
+                    val offset = Offset(rect.left, rect.top)
                     LlmRealWidgetGhost(
                         info = info,
                         offset = offset,
+                        width = with(density) { (rect.right - rect.left).toDp() },
+                        height = with(density) { (rect.bottom - rect.top).toDp() },
                         onTap = {
                             consumedGhostKeys += key
                             pendingRealComponents += component
-                            onRealWidgetSelected(info)
+                            onRealWidgetSelected(info, offset)
                         },
                     )
                 }
@@ -755,7 +812,7 @@ fun LockScreen(
                 onDismiss = { showRealWidgetPicker = false },
                 onSelect = { info ->
                     showRealWidgetPicker = false
-                    onRealWidgetSelected(info)
+                    onRealWidgetSelected(info, Offset(screenWidthPx * 0.2f, screenHeightPx * 0.45f))
                 },
             )
         }

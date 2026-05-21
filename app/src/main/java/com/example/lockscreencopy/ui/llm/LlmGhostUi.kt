@@ -279,6 +279,8 @@ fun ghostFloatingOffset(idx: Int, screenWidthPx: Float, screenHeightPx: Float): 
 fun LlmRealWidgetGhost(
     info: AppWidgetProviderInfo,
     offset: Offset,
+    width: Dp = 150.dp,
+    height: Dp = 110.dp,
     onTap: () -> Unit,
 ) {
     val ctx = LocalContext.current
@@ -296,8 +298,8 @@ fun LlmRealWidgetGhost(
     Box(
         modifier = Modifier
             .offset { IntOffset(offset.x.roundToInt(), offset.y.roundToInt()) }
-            .width(150.dp)
-            .height(110.dp)
+            .width(width)
+            .height(height)
             .graphicsLayer { alpha = 0.55f }
             .clip(RoundedCornerShape(16.dp))
             .background(Color.Black.copy(alpha = 0.25f))
