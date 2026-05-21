@@ -60,6 +60,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.example.lockscreencopy.R
+import com.example.lockscreencopy.data.handleSystemAction
+import com.example.lockscreencopy.data.launchAppShortcut
 import com.example.lockscreencopy.model.AddTarget
 import com.example.lockscreencopy.model.BottomShortcut
 import com.example.lockscreencopy.model.FavoriteAppsLayout
@@ -67,8 +69,6 @@ import com.example.lockscreencopy.model.FloatingWidget
 import com.example.lockscreencopy.model.HostedAppWidget
 import com.example.lockscreencopy.model.PlacedWidget
 import com.example.lockscreencopy.model.WidgetSize
-import com.example.lockscreencopy.data.handleSystemAction
-import com.example.lockscreencopy.data.launchAppShortcut
 import com.example.lockscreencopy.ui.llm.LlmSuggestionOverlay
 import com.example.lockscreencopy.ui.picker.BottomShortcutPickerSheet
 import com.example.lockscreencopy.ui.picker.FavoriteAppsPickerScreen
@@ -79,6 +79,7 @@ import com.example.lockscreencopy.ui.picker.LockWidgetPickerSheet
 import com.example.lockscreencopy.ui.picker.RealWidgetPickerSheet
 import com.example.lockscreencopy.ui.picker.ShortcutChoice
 import com.example.lockscreencopy.ui.picker.ShortcutPickerDialog
+import com.example.lockscreencopy.ui.theme.LockScreenCopyTheme
 import com.example.lockscreencopy.ui.widget.BottomShortcutButton
 import com.example.lockscreencopy.ui.widget.ClockHeader
 import com.example.lockscreencopy.ui.widget.FavoriteAppsDisplay
@@ -87,7 +88,6 @@ import com.example.lockscreencopy.ui.widget.HostedWidgetItem
 import com.example.lockscreencopy.ui.widget.LockStarBar
 import com.example.lockscreencopy.ui.widget.ResizeHandles
 import com.example.lockscreencopy.ui.widget.WidgetSlotRow
-import com.example.lockscreencopy.ui.theme.LockScreenCopyTheme
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import kotlin.math.roundToInt
@@ -104,6 +104,7 @@ fun LockScreen(
     onRemoveHosted: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
+
     var isFloating by remember { mutableStateOf(false) }
     var showShortcutPopup by remember { mutableStateOf(false) }
     var showLockWidgetPicker by remember { mutableStateOf(false) }
@@ -167,24 +168,40 @@ fun LockScreen(
 
     fun resizeHosted(uid: String, dx: Float, dy: Float, ax: Float, ay: Float) {
         val idx = hostedWidgets.indexOfFirst { it.uid == uid }
-        if (idx != -1) hostedWidgets[idx] = resizeHostedWidget(hostedWidgets[idx], dx, dy, ax, ay, density.density)
+        if (idx != -1) {
+            hostedWidgets[idx] = resizeHostedWidget(
+                hostedWidgets[idx],
+                dx,
+                dy,
+                ax,
+                ay,
+                density.density,
+            )
+        }
     }
 
     val scale by animateFloatAsState(
         targetValue = if (isFloating) 0.7f else 1f,
-        animationSpec = tween(500, easing = FastOutSlowInEasing), label = "scale",
+        animationSpec = tween(500, easing = FastOutSlowInEasing),
+        label = "scale",
     )
+
     val cornerRadius by animateDpAsState(
         targetValue = if (isFloating) 30.dp else 0.dp,
-        animationSpec = tween(500, easing = FastOutSlowInEasing), label = "corner",
+        animationSpec = tween(500, easing = FastOutSlowInEasing),
+        label = "corner",
     )
+
     val blurRadius by animateDpAsState(
         targetValue = if (isFloating) 20.dp else 0.dp,
-        animationSpec = tween(500, easing = FastOutSlowInEasing), label = "blur",
+        animationSpec = tween(500, easing = FastOutSlowInEasing),
+        label = "blur",
     )
+
     val editAlpha by animateFloatAsState(
         targetValue = if (isFloating) 1f else 0f,
-        animationSpec = tween(300, delayMillis = 200, easing = FastOutSlowInEasing), label = "editAlpha",
+        animationSpec = tween(300, delayMillis = 200, easing = FastOutSlowInEasing),
+        label = "editAlpha",
     )
 
     val screenWidthPx = with(density) { screenWidth.toPx() }
@@ -198,31 +215,41 @@ fun LockScreen(
             painter = painterResource(id = R.drawable.images),
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
                 .then(if (blurRadius > 0.dp) Modifier.blur(blurRadius) else Modifier),
         )
 
         Box(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
                 .graphicsLayer {
-                    scaleX = scale; scaleY = scale
+                    scaleX = scale
+                    scaleY = scale
                     transformOrigin = TransformOrigin(0.5f, 0.2f)
                 }
                 .clip(RoundedCornerShape(cornerRadius))
                 .pointerInput(Unit) {
-                    detectTapGestures(onPress = {
-                        val t0 = System.currentTimeMillis()
-                        val released = try {
-                            withTimeout(500) { tryAwaitRelease(); true }
-                        } catch (_: TimeoutCancellationException) {
-                            clockOffset = savedClockOffset
-                            isFloating = true; false
-                        }
-                        if (!isFloating && released && System.currentTimeMillis() - t0 >= 500) {
-                            clockOffset = savedClockOffset
-                            isFloating = true
-                        }
-                    })
+                    detectTapGestures(
+                        onPress = {
+                            val t0 = System.currentTimeMillis()
+                            val released = try {
+                                withTimeout(500) {
+                                    tryAwaitRelease()
+                                    true
+                                }
+                            } catch (_: TimeoutCancellationException) {
+                                clockOffset = savedClockOffset
+                                isFloating = true
+                                false
+                            }
+
+                            if (!isFloating && released && System.currentTimeMillis() - t0 >= 500) {
+                                clockOffset = savedClockOffset
+                                isFloating = true
+                            }
+                        },
+                    )
                 },
         ) {
             Image(
@@ -233,7 +260,9 @@ fun LockScreen(
             )
 
             Column(
-                modifier = Modifier.fillMaxSize().padding(16.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
@@ -265,27 +294,45 @@ fun LockScreen(
                                 }
                             }
                             .offset {
-                                val comp = clockCompensation(clockNaturalPosition, scale, density.density, screenWidthPx, screenHeightPx)
+                                val comp = clockCompensation(
+                                    naturalPos = clockNaturalPosition,
+                                    scale = scale,
+                                    density = density.density,
+                                    screenWidthPx = screenWidthPx,
+                                    screenHeightPx = screenHeightPx,
+                                )
                                 IntOffset(
                                     (clockOffset.x + comp.x).roundToInt(),
                                     (clockOffset.y + comp.y).roundToInt(),
                                 )
                             }
                             .pointerInput(isFloating) {
-                                if (isFloating) detectDragGestures { change, drag ->
-                                    change.consume(); clockOffset += drag
+                                if (isFloating) {
+                                    detectDragGestures { change, drag ->
+                                        change.consume()
+                                        clockOffset += drag
+                                    }
                                 }
                             },
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Box(
                             modifier = Modifier
-                                .border(1.dp, Color.White.copy(alpha = 0.7f * editAlpha), RoundedCornerShape(12.dp))
+                                .border(
+                                    1.dp,
+                                    Color.White.copy(alpha = 0.7f * editAlpha),
+                                    RoundedCornerShape(12.dp),
+                                )
                                 .padding(8.dp),
                         ) {
                             ClockHeader(scale = clockScale)
+
                             if (isFloating) {
-                                Box(modifier = Modifier.matchParentSize().graphicsLayer { alpha = editAlpha }) {
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .graphicsLayer { alpha = editAlpha },
+                                ) {
                                     ResizeHandles { dx, dy, _, _ ->
                                         val delta = (dx + dy) / 2f
                                         clockScale = (clockScale + delta).coerceIn(0.5f, 2.0f)
@@ -293,20 +340,23 @@ fun LockScreen(
                                 }
                             }
                         }
+
                         Spacer(modifier = Modifier.height(16.dp))
+
                         WidgetSlotRow(
                             placedWidgets = slotWidgets,
                             isFloating = isFloating,
                             slotSize = slotSize,
                             slotGap = slotGap,
-                            onRemove = { uid -> slotWidgets = slotWidgets.filter { it.uid != uid } },
+                            onRemove = { uid ->
+                                slotWidgets = slotWidgets.filter { it.uid != uid }
+                            },
                             onAdd = {
                                 addTarget = AddTarget.SLOT
                                 showLockWidgetPicker = true
                             },
                         )
                     }
-
                 }
 
                 if (isFloating) {
@@ -314,9 +364,17 @@ fun LockScreen(
                         modifier = Modifier
                             .graphicsLayer { alpha = editAlpha }
                             .padding(bottom = screenHeight * 0.05f)
-                            .offset { IntOffset(greenBoxOffset.x.roundToInt(), greenBoxOffset.y.roundToInt()) }
+                            .offset {
+                                IntOffset(
+                                    greenBoxOffset.x.roundToInt(),
+                                    greenBoxOffset.y.roundToInt(),
+                                )
+                            }
                             .pointerInput(isFloating) {
-                                detectDragGestures { c, d -> c.consume(); greenBoxOffset += d }
+                                detectDragGestures { c, d ->
+                                    c.consume()
+                                    greenBoxOffset += d
+                                }
                             }
                             .pointerInput(isFloating) {
                                 detectTapGestures(onTap = { showShortcutPopup = true })
@@ -335,14 +393,17 @@ fun LockScreen(
                     isFloating = isFloating,
                     isSelected = selectedFloatingUid == placed.uid,
                     onSelectToggle = {
-                        selectedFloatingUid = if (selectedFloatingUid == placed.uid) null else placed.uid
+                        selectedFloatingUid =
+                            if (selectedFloatingUid == placed.uid) null else placed.uid
                     },
                     onDrag = { drag ->
                         floatingWidgets = floatingWidgets.map {
                             if (it.uid == placed.uid) it.copy(offset = it.offset + drag) else it
                         }
                     },
-                    onResize = { dx, dy, ax, ay -> resizeFloating(placed.uid, dx, dy, ax, ay) },
+                    onResize = { dx, dy, ax, ay ->
+                        resizeFloating(placed.uid, dx, dy, ax, ay)
+                    },
                     onDelete = {
                         if (selectedFloatingUid == placed.uid) selectedFloatingUid = null
                         floatingWidgets = floatingWidgets.filter { it.uid != placed.uid }
@@ -356,27 +417,47 @@ fun LockScreen(
                     FavoriteAppsLayout.BOTTOM_RIGHT -> Alignment.BottomEnd
                     FavoriteAppsLayout.LEFT_VERTICAL -> Alignment.CenterStart
                 }
+
                 val favPad = when (favoriteAppsLayout) {
-                    FavoriteAppsLayout.BOTTOM_LEFT -> Modifier.padding(start = 16.dp, bottom = screenHeight * 0.13f)
-                    FavoriteAppsLayout.BOTTOM_RIGHT -> Modifier.padding(end = 16.dp, bottom = screenHeight * 0.13f)
-                    FavoriteAppsLayout.LEFT_VERTICAL -> Modifier.padding(start = 16.dp)
+                    FavoriteAppsLayout.BOTTOM_LEFT ->
+                        Modifier.padding(start = 16.dp, bottom = screenHeight * 0.13f)
+
+                    FavoriteAppsLayout.BOTTOM_RIGHT ->
+                        Modifier.padding(end = 16.dp, bottom = screenHeight * 0.13f)
+
+                    FavoriteAppsLayout.LEFT_VERTICAL ->
+                        Modifier.padding(start = 16.dp)
                 }
+
                 Box(
                     modifier = Modifier
                         .align(favAlign)
                         .then(favPad)
-                        .offset { IntOffset(favoriteAppsOffset.x.roundToInt(), favoriteAppsOffset.y.roundToInt()) }
+                        .offset {
+                            IntOffset(
+                                favoriteAppsOffset.x.roundToInt(),
+                                favoriteAppsOffset.y.roundToInt(),
+                            )
+                        }
                         .then(
-                            if (isFloating) Modifier
-                                .graphicsLayer { alpha = editAlpha }
-                                .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
-                                .padding(6.dp)
-                                .pointerInput(Unit) {
-                                    detectDragGestures { change, drag ->
-                                        change.consume(); favoriteAppsOffset += drag
+                            if (isFloating) {
+                                Modifier
+                                    .graphicsLayer { alpha = editAlpha }
+                                    .border(
+                                        1.dp,
+                                        Color.White.copy(alpha = 0.7f),
+                                        RoundedCornerShape(12.dp),
+                                    )
+                                    .padding(6.dp)
+                                    .pointerInput(Unit) {
+                                        detectDragGestures { change, drag ->
+                                            change.consume()
+                                            favoriteAppsOffset += drag
+                                        }
                                     }
-                                }
-                            else Modifier,
+                            } else {
+                                Modifier
+                            },
                         ),
                 ) {
                     FavoriteAppsDisplay(favorites = favoriteApps, layout = favoriteAppsLayout)
@@ -392,11 +473,15 @@ fun LockScreen(
                     shortcut = leftShortcut,
                     isEditing = isFloating,
                     onClick = {
-                        if (isFloating) pickingShortcutSide = ShortcutSide.LEFT
-                        else leftShortcut?.let { activateShortcut(it) }
+                        if (isFloating) {
+                            pickingShortcutSide = ShortcutSide.LEFT
+                        } else {
+                            leftShortcut?.let { activateShortcut(it) }
+                        }
                     },
                 )
             }
+
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
@@ -406,8 +491,11 @@ fun LockScreen(
                     shortcut = rightShortcut,
                     isEditing = isFloating,
                     onClick = {
-                        if (isFloating) pickingShortcutSide = ShortcutSide.RIGHT
-                        else rightShortcut?.let { activateShortcut(it) }
+                        if (isFloating) {
+                            pickingShortcutSide = ShortcutSide.RIGHT
+                        } else {
+                            rightShortcut?.let { activateShortcut(it) }
+                        }
                     },
                 )
             }
@@ -420,7 +508,8 @@ fun LockScreen(
                         isSelected = selectedFloatingUid == hosted.uid,
                         appWidgetHost = appWidgetHost,
                         onSelectToggle = {
-                            selectedFloatingUid = if (selectedFloatingUid == hosted.uid) null else hosted.uid
+                            selectedFloatingUid =
+                                if (selectedFloatingUid == hosted.uid) null else hosted.uid
                         },
                         onDrag = { drag ->
                             val idx = hostedWidgets.indexOfFirst { it.uid == hosted.uid }
@@ -429,7 +518,9 @@ fun LockScreen(
                                 hostedWidgets[idx] = hw.copy(offset = hw.offset + drag)
                             }
                         },
-                        onResize = { dx, dy, ax, ay -> resizeHosted(hosted.uid, dx, dy, ax, ay) },
+                        onResize = { dx, dy, ax, ay ->
+                            resizeHosted(hosted.uid, dx, dy, ax, ay)
+                        },
                         onDelete = {
                             if (selectedFloatingUid == hosted.uid) selectedFloatingUid = null
                             onRemoveHosted(hosted.uid)
@@ -444,6 +535,7 @@ fun LockScreen(
                 onDismiss = { showShortcutPopup = false },
                 onSelect = { choice ->
                     showShortcutPopup = false
+
                     when (choice) {
                         ShortcutChoice.RealWidget -> showRealWidgetPicker = true
                         ShortcutChoice.FavoriteApp -> showFavoriteSettings = true
@@ -458,9 +550,13 @@ fun LockScreen(
                 onDismiss = { showLockWidgetPicker = false },
                 onWidgetSelected = { widget ->
                     addCounter++
+
                     if (addTarget == AddTarget.SLOT) {
                         val needed = if (widget.size == WidgetSize.WIDE) 2 else 1
-                        val used = slotWidgets.sumOf { if (it.widget.size == WidgetSize.WIDE) 2 else 1 }
+                        val used = slotWidgets.sumOf {
+                            if (it.widget.size == WidgetSize.WIDE) 2 else 1
+                        }
+
                         if (used + needed <= 4) {
                             slotWidgets = slotWidgets + PlacedWidget(
                                 uid = "${widget.id}_$addCounter",
@@ -471,9 +567,13 @@ fun LockScreen(
                         floatingWidgets = floatingWidgets + FloatingWidget(
                             uid = "${widget.id}_$addCounter",
                             widget = widget,
-                            offset = Offset(80f + addCounter * 20f, 280f + addCounter * 20f),
+                            offset = Offset(
+                                80f + addCounter * 20f,
+                                280f + addCounter * 20f,
+                            ),
                         )
                     }
+
                     showLockWidgetPicker = false
                 },
             )
@@ -506,11 +606,21 @@ fun LockScreen(
             BottomShortcutPickerSheet(
                 onDismiss = { pickingShortcutSide = null },
                 onClear = {
-                    if (side == ShortcutSide.LEFT) leftShortcut = null else rightShortcut = null
+                    if (side == ShortcutSide.LEFT) {
+                        leftShortcut = null
+                    } else {
+                        rightShortcut = null
+                    }
+
                     pickingShortcutSide = null
                 },
                 onSelected = { sc ->
-                    if (side == ShortcutSide.LEFT) leftShortcut = sc else rightShortcut = sc
+                    if (side == ShortcutSide.LEFT) {
+                        leftShortcut = sc
+                    } else {
+                        rightShortcut = sc
+                    }
+
                     pickingShortcutSide = null
                 },
             )
@@ -543,6 +653,7 @@ fun LockScreen(
         llmSuggestion?.let { suggestion ->
             LlmSuggestionOverlay(
                 suggestion = suggestion,
+                appWidgetManager = appWidgetManager,
                 onCancel = { llmSuggestion = null },
                 onConfirm = { commit ->
                     val merged = (slotWidgets + commit.tray)
@@ -550,18 +661,29 @@ fun LockScreen(
                             val cap = 4
                             val out = ArrayList<PlacedWidget>(combined.size)
                             var used = 0
+
                             for (pw in combined) {
                                 val cost = if (pw.widget.size == WidgetSize.WIDE) 2 else 1
                                 if (used + cost > cap) continue
+
                                 out += pw
                                 used += cost
                             }
+
                             out
                         }
+
                     slotWidgets = merged
                     floatingWidgets = floatingWidgets + commit.floating
+
                     commit.left?.let { leftShortcut = it }
                     commit.right?.let { rightShortcut = it }
+
+                    // AI 추천에서 사용자가 "위젯" 또는 "둘 다"로 고른 실제 앱 위젯 추가
+                    commit.realWidgets.forEach { provider ->
+                        onRealWidgetSelected(provider)
+                    }
+
                     llmSuggestion = null
                 },
             )
@@ -583,7 +705,9 @@ fun LockScreen(
 @Preview(showBackground = true)
 @Composable
 private fun LockScreenPreview() {
-    LockScreenCopyTheme { LockScreen(onUnlock = {}) }
+    LockScreenCopyTheme {
+        LockScreen(onUnlock = {})
+    }
 }
 
 // scale 변화로 인한 시계 위치 이동을 상쇄하는 보정 offset 역산
@@ -596,8 +720,10 @@ private fun clockCompensation(
     screenHeightPx: Float,
 ): Offset {
     if (scale == 1f) return Offset.Zero
+
     val pivotX = screenWidthPx * 0.5f
     val pivotY = screenHeightPx * 0.2f
+
     return Offset(
         x = (naturalPos.x - pivotX) * (1f - scale) / scale,
         y = (naturalPos.y - pivotY) * (1f - scale) / scale,
@@ -605,12 +731,23 @@ private fun clockCompensation(
 }
 
 @Composable
-private fun EditModeTopBar(visible: Boolean, alpha: Float = 1f, onConfirm: () -> Unit) {
+private fun EditModeTopBar(
+    visible: Boolean,
+    alpha: Float = 1f,
+    onConfirm: () -> Unit,
+) {
     Row(
-        modifier = Modifier.fillMaxWidth().graphicsLayer { this.alpha = alpha },
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer { this.alpha = alpha },
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Button(onClick = {}, enabled = visible) { Text("배경화면") }
-        Button(onClick = onConfirm, enabled = visible) { Text("확인") }
+        Button(onClick = {}, enabled = visible) {
+            Text("배경화면")
+        }
+
+        Button(onClick = onConfirm, enabled = visible) {
+            Text("확인")
+        }
     }
 }
