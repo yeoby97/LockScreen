@@ -74,9 +74,11 @@ import com.example.lockscreencopy.data.launchAppShortcut
 import com.example.lockscreencopy.ui.llm.GhostInstance
 import com.example.lockscreencopy.ui.llm.LlmAppStrip
 import com.example.lockscreencopy.ui.llm.LlmFloatingGhost
+import com.example.lockscreencopy.ui.llm.LlmRealWidgetGhost
 import com.example.lockscreencopy.ui.llm.LlmTrayGhostRow
 import com.example.lockscreencopy.ui.llm.ShortcutRecommendationBadge
 import com.example.lockscreencopy.ui.llm.ghostFloatingOffset
+import com.example.lockscreencopy.ui.llm.realWidgetGhostKey
 import com.example.lockscreencopy.ui.picker.BottomShortcutPickerSheet
 import com.example.lockscreencopy.ui.picker.FavoriteAppsPickerScreen
 import com.example.lockscreencopy.ui.picker.FavoriteAppsSettingsSheet
@@ -454,6 +456,25 @@ fun LockScreen(
                             consumedGhostKeys += ghost.key
                             ghostOriginByUid[newUid] = ghost.key
                             selectedFloatingUid = newUid
+                        },
+                    )
+                }
+
+                // 실제 앱 위젯 ghost. mock 자유 ghost 의 총 개수 뒤로 이어서 배치
+                // (소비/액티브 앱과 무관하게 위치 고정을 위해 floatingGhosts.size 사용)
+                val realStartIdx = floatingGhosts.size
+                llmSuggestion?.realWidgetProviders?.forEachIndexed { rIdx, info ->
+                    val key = realWidgetGhostKey(info)
+                    if (key in consumedGhostKeys) return@forEachIndexed
+                    val offset = ghostFloatingOffset(
+                        realStartIdx + rIdx, screenWidthPx, screenHeightPx,
+                    )
+                    LlmRealWidgetGhost(
+                        info = info,
+                        offset = offset,
+                        onTap = {
+                            consumedGhostKeys += key
+                            onRealWidgetSelected(info)
                         },
                     )
                 }

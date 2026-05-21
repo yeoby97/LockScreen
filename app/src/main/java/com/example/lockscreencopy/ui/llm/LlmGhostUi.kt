@@ -1,5 +1,8 @@
 package com.example.lockscreencopy.ui.llm
 
+import android.appwidget.AppWidgetProviderInfo
+import android.graphics.drawable.Drawable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,16 +24,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -40,6 +50,7 @@ import com.example.lockscreencopy.model.LockWidget
 import com.example.lockscreencopy.model.WidgetApp
 import com.example.lockscreencopy.model.WidgetSize
 import com.example.lockscreencopy.ui.widget.WidgetCell
+import com.example.lockscreencopy.ui.widget.toBitmapSafe
 import kotlin.math.roundToInt
 
 private val SideChip = Color(0xFFFFA000)
@@ -239,3 +250,70 @@ fun ghostFloatingOffset(idx: Int, screenWidthPx: Float, screenHeightPx: Float): 
         x = screenWidthPx * 0.15f + (idx % 2) * screenWidthPx * 0.42f,
         y = screenHeightPx * 0.34f + (idx / 2) * screenHeightPx * 0.12f,
     )
+
+/**
+ * 실제 설치된 앱 위젯 ghost. providerInfo 의 미리보기 이미지를 투명하게 띄우고,
+ * 탭하면 실제 위젯 바인딩 흐름을 시작.
+ */
+@Composable
+fun LlmRealWidgetGhost(
+    info: AppWidgetProviderInfo,
+    offset: Offset,
+    onTap: () -> Unit,
+) {
+    val ctx = LocalContext.current
+    val densityDpi = (LocalDensity.current.density * 160f).roundToInt()
+    val componentKey = info.provider.flattenToShortString()
+    val previewBmp = remember(componentKey) {
+        val drawable: Drawable? = runCatching { info.loadPreviewImage(ctx, densityDpi) }.getOrNull()
+            ?: runCatching { info.loadIcon(ctx, densityDpi) }.getOrNull()
+        drawable?.toBitmapSafe()
+    }
+    val label = remember(componentKey) {
+        runCatching { info.loadLabel(ctx.packageManager).toString() }
+            .getOrDefault(info.provider.shortClassName)
+    }
+    Box(
+        modifier = Modifier
+            .offset { IntOffset(offset.x.roundToInt(), offset.y.roundToInt()) }
+            .width(150.dp)
+            .height(110.dp)
+            .graphicsLayer { alpha = 0.55f }
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.Black.copy(alpha = 0.25f))
+            .border(1.5.dp, GhostBorder, RoundedCornerShape(16.dp))
+            .clickable { onTap() }
+            .padding(6.dp),
+    ) {
+        if (previewBmp != null) {
+            Image(
+                bitmap = previewBmp.asImageBitmap(),
+                contentDescription = label,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Icon(
+                    Icons.Filled.Widgets, contentDescription = null,
+                    tint = Color.White, modifier = Modifier.size(28.dp),
+                )
+                Text(
+                    label, color = Color.White, fontSize = 10.sp,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 실제 앱 위젯 ghost 의 ID(consumed 추적용).
+ */
+fun realWidgetGhostKey(info: AppWidgetProviderInfo): String =
+    "real_${info.provider.flattenToShortString()}"

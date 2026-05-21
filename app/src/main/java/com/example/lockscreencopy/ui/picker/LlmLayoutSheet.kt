@@ -1,5 +1,6 @@
 package com.example.lockscreencopy.ui.picker
 
+import android.appwidget.AppWidgetProviderInfo
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -53,6 +54,7 @@ data class LlmSuggestionResult(
     val userQuery: String,
     val selected: SelectedFirstStep,
     val recommendation: LlmRecommendation,
+    val realWidgetProviders: List<AppWidgetProviderInfo> = emptyList(),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -141,11 +143,17 @@ fun LlmLayoutSheet(
                                 .clickable(enabled = !loading) {
                                     val cat = catalog ?: return@clickable
                                     val selected = case.toSelectedFirstStep(cat)
+                                    val reals = if (case.realWidgetCount > 0) {
+                                        cat.realWidgetProviders
+                                            .shuffled()
+                                            .take(case.realWidgetCount)
+                                    } else emptyList()
                                     onResult(
                                         LlmSuggestionResult(
                                             userQuery = case.userQuery,
                                             selected = selected,
                                             recommendation = case.recommendation,
+                                            realWidgetProviders = reals,
                                         ),
                                     )
                                 }

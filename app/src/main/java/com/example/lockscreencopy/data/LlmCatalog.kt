@@ -1,5 +1,7 @@
 package com.example.lockscreencopy.data
 
+import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
 import com.example.lockscreencopy.model.BottomShortcut
 import com.example.lockscreencopy.model.LockWidget
@@ -18,6 +20,7 @@ data class LlmCatalog(
     val widgetApps: List<WidgetApp>,
     val systemShortcuts: List<BottomShortcut.System>,
     val installedApps: List<BottomShortcut.App>,
+    val realWidgetProviders: List<AppWidgetProviderInfo> = emptyList(),
 ) {
     fun firstStepEntries(): List<LlmAppEntry> {
         val out = ArrayList<LlmAppEntry>(widgetApps.size + systemShortcuts.size + installedApps.size)
@@ -53,10 +56,14 @@ data class SelectedFirstStep(
 
 suspend fun buildLlmCatalog(context: Context): LlmCatalog {
     val installed = runCatching { loadInstalledApps(context) }.getOrElse { emptyList() }
+    val realWidgets = runCatching {
+        AppWidgetManager.getInstance(context).installedProviders
+    }.getOrElse { emptyList() }
     return LlmCatalog(
         widgetApps = lockWidgetApps,
         systemShortcuts = systemShortcuts,
         installedApps = installed,
+        realWidgetProviders = realWidgets,
     )
 }
 
