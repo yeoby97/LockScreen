@@ -49,9 +49,10 @@ object GeminiClient {
             val listText = buildString {
                 entries.forEach { e ->
                     val kindLabel = when (e.kind) {
-                        LlmAppEntry.Kind.WIDGET_APP -> "위젯 앱"
+                        LlmAppEntry.Kind.WIDGET_APP -> "트레이용 mock 위젯 앱"
+                        LlmAppEntry.Kind.REAL_WIDGET_APP -> "자유배치용 실제 앱"
                         LlmAppEntry.Kind.SYSTEM_SHORTCUT -> "기본 기능"
-                        LlmAppEntry.Kind.INSTALLED_APP -> "설치된 앱"
+                        LlmAppEntry.Kind.INSTALLED_APP -> "설치된 앱 바로가기"
                     }
                     append("- id=").append(e.id)
                         .append(" | 분류=").append(kindLabel)
@@ -79,14 +80,14 @@ object GeminiClient {
     suspend fun recommendWidgets(
         userQuery: String,
         trayCandidates: List<LockWidget>,
-        floatingCandidates: List<LockWidget>,
+        floatingCandidates: List<RealWidgetEntry>,
         shortcutCandidates: List<BottomShortcut>,
     ): LlmRecommendation = withContext(Dispatchers.IO) {
         val trayText = trayCandidates.joinToString("\n") { w ->
             "- id=${w.id} | 앱=${w.appId} | 이름=${w.name} | 크기=${if (w.size == WidgetSize.WIDE) "WIDE(2칸)" else "SMALL(1칸)"}"
         }
-        val floatingText = floatingCandidates.joinToString("\n") { w ->
-            "- id=${w.id} | 앱=${w.appId} | 이름=${w.name} | 크기=${if (w.size == WidgetSize.WIDE) "WIDE" else "SMALL"}"
+        val floatingText = floatingCandidates.joinToString("\n") { e ->
+            "- id=${e.component} | 앱=${e.appLabel} (${e.packageName}) | 이름=${e.label} | 크기=${e.sizeText}"
         }
         val shortcutText = shortcutCandidates.joinToString("\n") { sc ->
             val kind = if (sc is BottomShortcut.System) "기본기능" else "앱"
@@ -97,24 +98,26 @@ object GeminiClient {
             사용자 요구: "${userQuery.trim()}"
 
             세 영역에 배치할 위젯/바로가기를 추천해 주세요.
-            - 트레이 영역: 작은 위젯 슬롯. SMALL=1칸, WIDE=2칸. 총 합계 4칸을 넘지 마세요.
-            - 자유 배치 영역: 큰 위젯들을 자유 배치하는 영역. 0~4개 추천.
+            - 트레이 영역: 작은 위젯 슬롯(권한 없는 영역이므로 mock 위젯 사용).
+              SMALL=1칸, WIDE=2칸. 총 합계 4칸을 넘지 마세요.
+            - 자유 배치 영역: 실제 설치된 앱의 위젯들. id 는 반드시 component
+              문자열을 그대로 사용. 0~6개 추천.
             - 좌측/우측 바로가기: 하단의 단일 바로가기. 각각 1개 또는 null.
 
             반드시 JSON으로만 응답하세요. 다른 설명 없이 JSON만.
 
             응답 스키마:
             {
-              "tray": ["<lockwidget id>", ...],
-              "floating": ["<lockwidget id>", ...],
+              "tray": ["<mock lockwidget id>", ...],
+              "floating": ["<real widget component>", ...],
               "left": "<shortcut id 또는 null>",
               "right": "<shortcut id 또는 null>"
             }
 
-            [트레이 후보]
+            [트레이 후보 (mock)]
             $trayText
 
-            [자유 배치 후보]
+            [자유 배치 후보 (실제 설치 앱 위젯)]
             $floatingText
 
             [바로가기 후보]

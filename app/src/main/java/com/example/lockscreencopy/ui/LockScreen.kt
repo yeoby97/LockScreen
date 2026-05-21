@@ -33,9 +33,11 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -69,7 +71,15 @@ import com.example.lockscreencopy.model.PlacedWidget
 import com.example.lockscreencopy.model.WidgetSize
 import com.example.lockscreencopy.data.handleSystemAction
 import com.example.lockscreencopy.data.launchAppShortcut
-import com.example.lockscreencopy.ui.llm.LlmSuggestionOverlay
+import com.example.lockscreencopy.ui.llm.GhostInstance
+import com.example.lockscreencopy.ui.llm.LlmAppStrip
+import com.example.lockscreencopy.ui.llm.LlmRealWidgetGhost
+import com.example.lockscreencopy.ui.llm.LlmTrayGhostRow
+import com.example.lockscreencopy.ui.llm.ShortcutRecommendationBadge
+import com.example.lockscreencopy.ui.llm.StripAppEntry
+import com.example.lockscreencopy.ui.llm.ghostFloatingOffset
+import com.example.lockscreencopy.ui.llm.realWidgetGhostKey
+import com.example.lockscreencopy.ui.widget.toBitmapSafe
 import com.example.lockscreencopy.ui.picker.BottomShortcutPickerSheet
 import com.example.lockscreencopy.ui.picker.FavoriteAppsPickerScreen
 import com.example.lockscreencopy.ui.picker.FavoriteAppsSettingsSheet
@@ -152,7 +162,128 @@ fun LockScreen(
         greenBoxOffset = Offset.Zero
         selectedFloatingUid = null
         isFloating = false
+        llmSuggestion = null
     }
+
+    LaunchedEffect(llmSuggestion) {
+        if (llmSuggestion != null && !isFloating) {
+            clockOffset = savedClockOffset
+            isFloating = true
+        }
+    }
+
+    var activeLlmAppId by remember(llmSuggestion) { mutableStateOf<String?>(null) }
+    val consumedGhostKeys = remember(llmSuggestion) { mutableStateListOf<String>() }
+    val ghostOriginByUid = remember(llmSuggestion) { mutableStateMapOf<String, String>() }
+    /** 실제 위젯 ghost 를 탭한 직후 ~ HostedAppWidget 이 생성되기까지의 component 목록 */
+    val pendingRealComponents = remember(llmSuggestion) { mutableStateListOf<String>() }
+    var leftShortcutRecDismissed by remember(llmSuggestion) { mutableStateOf(false) }
+    var rightShortcutRecDismissed by remember(llmSuggestion) { mutableStateOf(false) }
+
+    /** LLM 세션 시작 시점의 좌/우 바로가기 스냅샷 (취소 시 복원용) */
+    val preLlmLeftShortcut = remember(llmSuggestion) { leftShortcut }
+    val preLlmRightShortcut = remember(llmSuggestion) { rightShortcut }
+
+    fun releaseGhostFor(uid: String) {
+        val key = ghostOriginByUid.remove(uid) ?: return
+        consumedGhostKeys.remove(key)
+    }
+
+    // 새로 추가된 hosted widget 이 pending real ghost 의 결과면 uid → ghost key 매핑 기록.
+    // 이후 사용자가 해당 hosted widget 을 삭제하면 releaseGhostFor 로 ghost 복원.
+    LaunchedEffect(hostedWidgets.size, pendingRealComponents.size) {
+        if (pendingRealComponents.isEmpty()) return@LaunchedEffect
+        hostedWidgets.forEach { hw ->
+            if (hw.uid in ghostOriginByUid) return@forEach
+            val comp = hw.providerInfo.provider.flattenToShortString()
+            val pendingIdx = pendingRealComponents.indexOf(comp)
+            if (pendingIdx >= 0) {
+                ghostOriginByUid[hw.uid] = realWidgetGhostKey(comp)
+                pendingRealComponents.removeAt(pendingIdx)
+            }
+        }
+    }
+
+    val leftRecommendation = llmSuggestion?.let { s ->
+        s.recommendation.left?.let { id -> s.selected.shortcutCandidates().firstOrNull { it.id == id } }
+    }
+    val rightRecommendation = llmSuggestion?.let { s ->
+        s.recommendation.right?.let { id -> s.selected.shortcutCandidates().firstOrNull { it.id == id } }
+    }
+
+    // mock 앱 + 실제 앱을 이름 기반으로 매칭해 하나의 스트립 엔트리로 머지.
+    // 매칭되면 같은 엔트리에서 트레이 ghost(mock)와 자유 ghost(real)이 동시에 노출됨.
+    val stripEntries: List<StripAppEntry> = llmSuggestion?.let { s ->
+        val mockWithRec = s.selected.widgetApps.filter { app ->
+            s.recommendation.tray.any { id -> app.widgets.any { it.id == id } }
+        }
+        val realWithRec = s.selected.realApps.filter { ra ->
+            ra.providers.any { it.provider.flattenToShortString() in s.recommendation.floating }
+        }
+        fun normalize(text: String): String =
+            text.lowercase().filter { it.isLetterOrDigit() }
+        val takenRealPackages = HashSet<String>()
+        buildList {
+            mockWithRec.forEach { mockApp ->
+                val mockKey = normalize(mockApp.name)
+                val match = realWithRec.firstOrNull { ra ->
+                    ra.packageName !in takenRealPackages && run {
+                        val n = normalize(ra.appLabel)
+                        mockKey.isNotEmpty() && (n.contains(mockKey) || mockKey.contains(n))
+                    }
+                }
+                if (match != null) takenRealPackages += match.packageName
+                add(
+                    StripAppEntry(
+                        id = mockApp.id,
+                        name = mockApp.name,
+                        iconBg = mockApp.iconBg,
+                        iconVector = mockApp.icon,
+                        mockAppId = mockApp.id,
+                        realPackages = listOfNotNull(match?.packageName),
+                    ),
+                )
+            }
+            realWithRec.forEach { ra ->
+                if (ra.packageName in takenRealPackages) return@forEach
+                add(
+                    StripAppEntry(
+                        id = ra.firstStepId,
+                        name = ra.appLabel,
+                        iconBg = Color(0xFF424242),
+                        iconBitmap = ra.appIcon?.toBitmapSafe(),
+                        realPackages = listOf(ra.packageName),
+                    ),
+                )
+            }
+        }
+    } ?: emptyList()
+
+    val activeEntry = stripEntries.firstOrNull { it.id == activeLlmAppId }
+    val activeMockApp = activeEntry?.mockAppId?.let { mid ->
+        llmSuggestion?.selected?.widgetApps?.firstOrNull { it.id == mid }
+    }
+    val activeRealApps = activeEntry?.realPackages?.mapNotNull { pkg ->
+        llmSuggestion?.selected?.realApps?.firstOrNull { it.packageName == pkg }
+    } ?: emptyList()
+
+    // 트레이 ghost: 선택된 엔트리에 mock 앱이 매칭돼 있을 때
+    val trayGhosts: List<GhostInstance> = if (llmSuggestion != null && activeMockApp != null) {
+        llmSuggestion!!.recommendation.tray.mapIndexedNotNull { idx, id ->
+            activeMockApp.widgets.firstOrNull { it.id == id }?.let { w ->
+                GhostInstance("tray_${activeMockApp.id}_${idx}_$id", w)
+            }
+        }
+    } else emptyList()
+
+    // 자유 ghost: 선택된 엔트리에 실제 앱이 매칭돼 있을 때
+    val realFloatingGhosts: List<AppWidgetProviderInfo> =
+        if (llmSuggestion != null && activeRealApps.isNotEmpty()) {
+            val recComponents = llmSuggestion!!.recommendation.floating.toHashSet()
+            activeRealApps.flatMap { ra ->
+                ra.providers.filter { it.provider.flattenToShortString() in recComponents }
+            }
+        } else emptyList()
 
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
@@ -248,6 +379,7 @@ fun LockScreen(
                             greenBoxOffset = Offset.Zero
                             selectedFloatingUid = null
                             isFloating = false
+                            llmSuggestion = null
                         },
                     )
 
@@ -299,12 +431,41 @@ fun LockScreen(
                             isFloating = isFloating,
                             slotSize = slotSize,
                             slotGap = slotGap,
-                            onRemove = { uid -> slotWidgets = slotWidgets.filter { it.uid != uid } },
+                            onRemove = { uid ->
+                                slotWidgets = slotWidgets.filter { it.uid != uid }
+                                releaseGhostFor(uid)
+                            },
                             onAdd = {
                                 addTarget = AddTarget.SLOT
                                 showLockWidgetPicker = true
                             },
                         )
+                        if (isFloating && trayGhosts.any { it.key !in consumedGhostKeys }) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            val trayUsed = slotWidgets.sumOf {
+                                if (it.widget.size == WidgetSize.WIDE) 2 else 1
+                            }
+                            LlmTrayGhostRow(
+                                ghosts = trayGhosts,
+                                consumed = consumedGhostKeys.toSet(),
+                                trayUsedSpan = trayUsed,
+                                slotSize = slotSize,
+                                slotGap = slotGap,
+                                onTap = { ghost ->
+                                    val needed = if (ghost.widget.size == WidgetSize.WIDE) 2 else 1
+                                    if (trayUsed + needed <= 4) {
+                                        addCounter++
+                                        val newUid = "${ghost.widget.id}_$addCounter"
+                                        slotWidgets = slotWidgets + PlacedWidget(
+                                            uid = newUid,
+                                            widget = ghost.widget,
+                                        )
+                                        consumedGhostKeys += ghost.key
+                                        ghostOriginByUid[newUid] = ghost.key
+                                    }
+                                },
+                            )
+                        }
                     }
 
                 }
@@ -346,8 +507,28 @@ fun LockScreen(
                     onDelete = {
                         if (selectedFloatingUid == placed.uid) selectedFloatingUid = null
                         floatingWidgets = floatingWidgets.filter { it.uid != placed.uid }
+                        releaseGhostFor(placed.uid)
                     },
                 )
+            }
+
+            // 자유 배치 영역 ghost: 실제 설치된 앱의 위젯만 사용 (활성 실제 앱의 추천만)
+            if (isFloating) {
+                realFloatingGhosts.forEachIndexed { idx, info ->
+                    val component = info.provider.flattenToShortString()
+                    val key = realWidgetGhostKey(component)
+                    if (key in consumedGhostKeys) return@forEachIndexed
+                    val offset = ghostFloatingOffset(idx, screenWidthPx, screenHeightPx)
+                    LlmRealWidgetGhost(
+                        info = info,
+                        offset = offset,
+                        onTap = {
+                            consumedGhostKeys += key
+                            pendingRealComponents += component
+                            onRealWidgetSelected(info)
+                        },
+                    )
+                }
             }
 
             if (favoriteAppsEnabled && favoriteApps.isNotEmpty()) {
@@ -396,6 +577,22 @@ fun LockScreen(
                         else leftShortcut?.let { activateShortcut(it) }
                     },
                 )
+                if (leftRecommendation != null && !leftShortcutRecDismissed) {
+                    val applied = leftShortcut?.id == leftRecommendation.id
+                    ShortcutRecommendationBadge(
+                        shortcut = leftRecommendation,
+                        applied = applied,
+                        onToggle = {
+                            leftShortcut = if (applied) null else leftRecommendation
+                        },
+                        onCancel = {
+                            leftShortcut = preLlmLeftShortcut
+                            leftShortcutRecDismissed = true
+                        },
+                        modifier = Modifier.offset(y = (-70).dp),
+                        cancelAlignment = Alignment.TopEnd,
+                    )
+                }
             }
             Box(
                 modifier = Modifier
@@ -410,6 +607,22 @@ fun LockScreen(
                         else rightShortcut?.let { activateShortcut(it) }
                     },
                 )
+                if (rightRecommendation != null && !rightShortcutRecDismissed) {
+                    val applied = rightShortcut?.id == rightRecommendation.id
+                    ShortcutRecommendationBadge(
+                        shortcut = rightRecommendation,
+                        applied = applied,
+                        onToggle = {
+                            rightShortcut = if (applied) null else rightRecommendation
+                        },
+                        onCancel = {
+                            rightShortcut = preLlmRightShortcut
+                            rightShortcutRecDismissed = true
+                        },
+                        modifier = Modifier.offset(y = (-70).dp),
+                        cancelAlignment = Alignment.TopStart,
+                    )
+                }
             }
 
             hostedWidgets.forEach { hosted ->
@@ -432,6 +645,7 @@ fun LockScreen(
                         onResize = { dx, dy, ax, ay -> resizeHosted(hosted.uid, dx, dy, ax, ay) },
                         onDelete = {
                             if (selectedFloatingUid == hosted.uid) selectedFloatingUid = null
+                            releaseGhostFor(hosted.uid)
                             onRemoveHosted(hosted.uid)
                         },
                     )
@@ -540,30 +754,16 @@ fun LockScreen(
             )
         }
 
-        llmSuggestion?.let { suggestion ->
-            LlmSuggestionOverlay(
-                suggestion = suggestion,
-                onCancel = { llmSuggestion = null },
-                onConfirm = { commit ->
-                    val merged = (slotWidgets + commit.tray)
-                        .let { combined ->
-                            val cap = 4
-                            val out = ArrayList<PlacedWidget>(combined.size)
-                            var used = 0
-                            for (pw in combined) {
-                                val cost = if (pw.widget.size == WidgetSize.WIDE) 2 else 1
-                                if (used + cost > cap) continue
-                                out += pw
-                                used += cost
-                            }
-                            out
-                        }
-                    slotWidgets = merged
-                    floatingWidgets = floatingWidgets + commit.floating
-                    commit.left?.let { leftShortcut = it }
-                    commit.right?.let { rightShortcut = it }
-                    llmSuggestion = null
-                },
+        if (llmSuggestion != null) {
+            LlmAppStrip(
+                apps = stripEntries,
+                selectedAppId = activeLlmAppId,
+                onSelect = { activeLlmAppId = it },
+                onClose = { llmSuggestion = null },
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 6.dp, top = 60.dp, bottom = 60.dp)
+                    .graphicsLayer { alpha = editAlpha },
             )
         }
 
