@@ -180,7 +180,7 @@ fun LlmFloatingGhost(
 }
 
 /**
- * 좌/우 하단 바로가기 버튼 위치에 겹쳐서 추천을 표시. 탭하면 적용.
+ * 좌/우 하단 바로가기 버튼 위치에 겹쳐서 투명 ghost 로 추천을 표시. 탭하면 적용.
  */
 @Composable
 fun ShortcutRecommendationBadge(
@@ -191,9 +191,10 @@ fun ShortcutRecommendationBadge(
     Box(
         modifier = modifier
             .size(56.dp)
+            .graphicsLayer { alpha = 0.55f }
             .clip(CircleShape)
-            .background(Color(0xCC4DAAED))
-            .border(2.dp, SideChip, CircleShape)
+            .background(Color.Black.copy(alpha = 0.25f))
+            .border(1.5.dp, GhostBorder, CircleShape)
             .clickable(onClick = onAccept),
         contentAlignment = Alignment.Center,
     ) {
@@ -206,16 +207,6 @@ fun ShortcutRecommendationBadge(
                 Icons.Filled.Close, contentDescription = shortcut.label,
                 tint = Color.White, modifier = Modifier.size(26.dp),
             )
-        }
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .size(14.dp)
-                .clip(CircleShape)
-                .background(SideChip),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("★", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
