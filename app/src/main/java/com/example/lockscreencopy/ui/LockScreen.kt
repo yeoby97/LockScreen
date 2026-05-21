@@ -37,6 +37,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -170,6 +171,14 @@ fun LockScreen(
 
     var activeLlmAppId by remember(llmSuggestion) { mutableStateOf<String?>(null) }
     val consumedGhostKeys = remember(llmSuggestion) { mutableStateListOf<String>() }
+    val ghostOriginByUid = remember(llmSuggestion) { mutableStateMapOf<String, String>() }
+    var leftShortcutRecDismissed by remember(llmSuggestion) { mutableStateOf(false) }
+    var rightShortcutRecDismissed by remember(llmSuggestion) { mutableStateOf(false) }
+
+    fun releaseGhostFor(uid: String) {
+        val key = ghostOriginByUid.remove(uid) ?: return
+        consumedGhostKeys.remove(key)
+    }
 
     val leftRecommendation = llmSuggestion?.let { s ->
         s.recommendation.left?.let { id -> s.selected.shortcutCandidates().firstOrNull { it.id == id } }
@@ -346,7 +355,10 @@ fun LockScreen(
                             isFloating = isFloating,
                             slotSize = slotSize,
                             slotGap = slotGap,
-                            onRemove = { uid -> slotWidgets = slotWidgets.filter { it.uid != uid } },
+                            onRemove = { uid ->
+                                slotWidgets = slotWidgets.filter { it.uid != uid }
+                                releaseGhostFor(uid)
+                            },
                             onAdd = {
                                 addTarget = AddTarget.SLOT
                                 showLockWidgetPicker = true
@@ -367,11 +379,13 @@ fun LockScreen(
                                     val needed = if (ghost.widget.size == WidgetSize.WIDE) 2 else 1
                                     if (trayUsed + needed <= 4) {
                                         addCounter++
+                                        val newUid = "${ghost.widget.id}_$addCounter"
                                         slotWidgets = slotWidgets + PlacedWidget(
-                                            uid = "${ghost.widget.id}_$addCounter",
+                                            uid = newUid,
                                             widget = ghost.widget,
                                         )
                                         consumedGhostKeys += ghost.key
+                                        ghostOriginByUid[newUid] = ghost.key
                                     }
                                 },
                             )
@@ -417,6 +431,7 @@ fun LockScreen(
                     onDelete = {
                         if (selectedFloatingUid == placed.uid) selectedFloatingUid = null
                         floatingWidgets = floatingWidgets.filter { it.uid != placed.uid }
+                        releaseGhostFor(placed.uid)
                     },
                 )
             }
@@ -437,6 +452,7 @@ fun LockScreen(
                                 offset = ghostOffset,
                             )
                             consumedGhostKeys += ghost.key
+                            ghostOriginByUid[newUid] = ghost.key
                             selectedFloatingUid = newUid
                         },
                     )
@@ -489,10 +505,15 @@ fun LockScreen(
                         else leftShortcut?.let { activateShortcut(it) }
                     },
                 )
-                if (leftRecommendation != null && leftShortcut?.id != leftRecommendation.id) {
+                if (leftRecommendation != null &&
+                    leftShortcut?.id != leftRecommendation.id &&
+                    !leftShortcutRecDismissed
+                ) {
                     ShortcutRecommendationBadge(
                         shortcut = leftRecommendation,
                         onAccept = { leftShortcut = leftRecommendation },
+                        onCancel = { leftShortcutRecDismissed = true },
+                        modifier = Modifier.offset(y = (-70).dp),
                     )
                 }
             }
@@ -509,10 +530,15 @@ fun LockScreen(
                         else rightShortcut?.let { activateShortcut(it) }
                     },
                 )
-                if (rightRecommendation != null && rightShortcut?.id != rightRecommendation.id) {
+                if (rightRecommendation != null &&
+                    rightShortcut?.id != rightRecommendation.id &&
+                    !rightShortcutRecDismissed
+                ) {
                     ShortcutRecommendationBadge(
                         shortcut = rightRecommendation,
                         onAccept = { rightShortcut = rightRecommendation },
+                        onCancel = { rightShortcutRecDismissed = true },
+                        modifier = Modifier.offset(y = (-70).dp),
                     )
                 }
             }

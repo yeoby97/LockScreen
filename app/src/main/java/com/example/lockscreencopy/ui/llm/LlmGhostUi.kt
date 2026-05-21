@@ -180,32 +180,52 @@ fun LlmFloatingGhost(
 }
 
 /**
- * 좌/우 하단 바로가기 버튼 위치에 겹쳐서 투명 ghost 로 추천을 표시. 탭하면 적용.
+ * 좌/우 하단 바로가기 버튼 바로 위에 투명 ghost 로 추천 표시.
+ * - 본체 탭: 적용 (onAccept)
+ * - 우상단 X 탭: 추천 취소 (onCancel)
  */
 @Composable
 fun ShortcutRecommendationBadge(
     shortcut: BottomShortcut,
     onAccept: () -> Unit,
+    onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Box(
-        modifier = modifier
-            .size(56.dp)
-            .graphicsLayer { alpha = 0.55f }
-            .clip(CircleShape)
-            .background(Color.Black.copy(alpha = 0.25f))
-            .border(1.5.dp, GhostBorder, CircleShape)
-            .clickable(onClick = onAccept),
-        contentAlignment = Alignment.Center,
-    ) {
-        when (shortcut) {
-            is BottomShortcut.System -> Icon(
-                shortcut.icon, contentDescription = shortcut.label,
-                tint = Color.White, modifier = Modifier.size(26.dp),
-            )
-            is BottomShortcut.App -> Icon(
-                Icons.Filled.Close, contentDescription = shortcut.label,
-                tint = Color.White, modifier = Modifier.size(26.dp),
+    Box(modifier = modifier.size(56.dp)) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .graphicsLayer { alpha = 0.55f }
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.25f))
+                .border(1.5.dp, GhostBorder, CircleShape)
+                .clickable(onClick = onAccept),
+            contentAlignment = Alignment.Center,
+        ) {
+            when (shortcut) {
+                is BottomShortcut.System -> Icon(
+                    shortcut.icon, contentDescription = shortcut.label,
+                    tint = Color.White, modifier = Modifier.size(26.dp),
+                )
+                is BottomShortcut.App -> Icon(
+                    Icons.Filled.Close, contentDescription = shortcut.label,
+                    tint = Color.White, modifier = Modifier.size(26.dp),
+                )
+            }
+        }
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = 6.dp, y = (-6).dp)
+                .size(18.dp)
+                .clip(CircleShape)
+                .background(Color(0xFFFF453A))
+                .clickable { onCancel() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Filled.Close, contentDescription = "취소",
+                tint = Color.White, modifier = Modifier.size(10.dp),
             )
         }
     }
