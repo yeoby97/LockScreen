@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Widgets
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
@@ -68,6 +69,7 @@ private enum class WidgetFilter(val label: String) {
     HasWidgets("위젯 보유 앱"),
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RealWidgetPickerSheet(
     appWidgetManager: AppWidgetManager,
@@ -174,7 +176,6 @@ fun RealWidgetPickerSheet(
                         val key = item.providerInfo.provider.flattenToShortString()
                         WidgetPreviewCard(
                             item = item,
-                            pm = pm,
                             ctx = ctx,
                             densityDpi = densityDpi,
                             selected = selectedKeys.contains(key),
@@ -203,7 +204,6 @@ fun RealWidgetPickerSheet(
         ) {
             WidgetPreviewCard(
                 item = item,
-                pm = pm,
                 ctx = ctx,
                 densityDpi = densityDpi,
                 selected = false,
@@ -230,7 +230,6 @@ private fun appInfo(pm: PackageManager, pkg: String): Pair<String, Drawable?> {
 @Composable
 private fun WidgetPreviewCard(
     item: WidgetItem,
-    pm: PackageManager,
     ctx: android.content.Context,
     densityDpi: Int,
     selected: Boolean,
