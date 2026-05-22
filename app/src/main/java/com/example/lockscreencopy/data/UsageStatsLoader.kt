@@ -10,6 +10,7 @@ import android.provider.Settings
 import com.example.lockscreencopy.model.BottomShortcut
 import java.util.concurrent.TimeUnit
 
+
 private const val MAX_FAVORITES_DISPLAY = 6
 private const val MIN_FAVORITES_KEEP = 3
 private const val GAP_RATIO = 0.4
@@ -57,24 +58,21 @@ fun loadWeeklyUsage(context: Context): Map<String, Long> {
     return out
 }
 
-fun sortFavoritesByUsageWithGap(
-    favorites: List<BottomShortcut>,
+fun topUsedAppsWithGap(
+    apps: List<BottomShortcut.App>,
     usage: Map<String, Long>,
 ): List<BottomShortcut> {
-    if (favorites.isEmpty()) return favorites
+    if (apps.isEmpty() || usage.isEmpty()) return emptyList()
 
-    val withUsage = favorites.map { sc ->
-        val time = when (sc) {
-            is BottomShortcut.App -> usage[sc.packageName] ?: 0L
-            is BottomShortcut.System -> 0L
-        }
-        sc to time
+    val withUsage = apps.mapNotNull { app ->
+        val time = usage[app.packageName] ?: 0L
+        if (time <= 0L) null else app to time
     }.sortedByDescending { it.second }
+
+    if (withUsage.isEmpty()) return emptyList()
 
     val sorted = withUsage.map { it.first }
     val times = withUsage.map { it.second }
-
-    if (times.firstOrNull() == 0L) return favorites
 
     val cap = minOf(MAX_FAVORITES_DISPLAY, sorted.size)
     val minKeep = minOf(MIN_FAVORITES_KEEP, sorted.size)

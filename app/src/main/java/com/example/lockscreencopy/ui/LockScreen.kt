@@ -74,9 +74,10 @@ import com.example.lockscreencopy.model.WidgetSize
 import com.example.lockscreencopy.data.handleSystemAction
 import com.example.lockscreencopy.data.hasUsageStatsPermission
 import com.example.lockscreencopy.data.launchAppShortcut
+import com.example.lockscreencopy.data.loadInstalledApps
 import com.example.lockscreencopy.data.loadWeeklyUsage
 import com.example.lockscreencopy.data.openUsageAccessSettings
-import com.example.lockscreencopy.data.sortFavoritesByUsageWithGap
+import com.example.lockscreencopy.data.topUsedAppsWithGap
 import com.example.lockscreencopy.ui.llm.GhostInstance
 import com.example.lockscreencopy.ui.llm.LlmAppStrip
 import com.example.lockscreencopy.ui.llm.LlmRealWidgetGhost
@@ -133,6 +134,7 @@ fun LockScreen(
     var favoriteAppsLayout by remember { mutableStateOf(FavoriteAppsLayout.BOTTOM_LEFT) }
     var favoriteAppsUsageSort by remember { mutableStateOf(false) }
     var weeklyUsage by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
+    var installedApps by remember { mutableStateOf<List<BottomShortcut.App>>(emptyList()) }
     var showFavoriteSettings by remember { mutableStateOf(false) }
     var showFavoritePicker by remember { mutableStateOf(false) }
 
@@ -141,14 +143,16 @@ fun LockScreen(
             if (!hasUsageStatsPermission(context)) {
                 openUsageAccessSettings(context)
                 weeklyUsage = emptyMap()
+                installedApps = emptyList()
             } else {
                 weeklyUsage = withContext(Dispatchers.IO) { loadWeeklyUsage(context) }
+                installedApps = withContext(Dispatchers.IO) { loadInstalledApps(context) }
             }
         }
     }
 
     val displayedFavorites = if (favoriteAppsUsageSort && weeklyUsage.isNotEmpty()) {
-        sortFavoritesByUsageWithGap(favoriteApps, weeklyUsage)
+        topUsedAppsWithGap(installedApps, weeklyUsage)
     } else {
         favoriteApps
     }

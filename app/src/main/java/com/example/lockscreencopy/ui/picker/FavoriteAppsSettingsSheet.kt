@@ -221,7 +221,7 @@ private fun LayoutPreviewBottomLeft() {
             modifier = Modifier.align(Alignment.BottomStart),
             horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            repeat(6) { Dot() }
+            repeat(3) { Dot() }
         }
     }
 }
@@ -233,7 +233,7 @@ private fun LayoutPreviewLeftVertical() {
             modifier = Modifier.align(Alignment.CenterStart),
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            repeat(6) { Dot() }
+            repeat(3) { Dot() }
         }
     }
 }
@@ -245,7 +245,7 @@ private fun LayoutPreviewBottomRight() {
             modifier = Modifier.align(Alignment.BottomEnd),
             horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            repeat(6) { Dot() }
+            repeat(3) { Dot() }
         }
     }
 }
