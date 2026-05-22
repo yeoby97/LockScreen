@@ -34,21 +34,33 @@ class LockScreenActivity : ComponentActivity() {
     private val pendingComponentsByWidgetId = mutableMapOf<Int, String>()
     // 바인딩 거부로 취소된 위젯 component (LockScreen 이 관찰해 추천 ghost 복원)
     private val cancelledComponents: SnapshotStateList<String> = mutableStateListOf()
+    // bind/configure 화면으로 넘어간 위젯 id. 취소 시 result.data 가 null 이라 이 값으로 복구한다.
+    private var inFlightWidgetId: Int = -1
 
     private val bindWidgetLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
-        val id = result.data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
-        if (result.resultCode == Activity.RESULT_OK && id != -1) configureOrAdd(id)
-        else if (id != -1) cancelPending(id)
+        val id = resolveResultWidgetId(result.data)
+        inFlightWidgetId = -1
+        if (id == -1) return@registerForActivityResult
+        if (result.resultCode == Activity.RESULT_OK) configureOrAdd(id)
+        else cancelPending(id)
     }
 
     private val configureWidgetLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
-        val id = result.data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
-        if (result.resultCode == Activity.RESULT_OK && id != -1) addHostedWidget(id)
-        else if (id != -1) cancelPending(id)
+        val id = resolveResultWidgetId(result.data)
+        inFlightWidgetId = -1
+        if (id == -1) return@registerForActivityResult
+        if (result.resultCode == Activity.RESULT_OK) addHostedWidget(id)
+        else cancelPending(id)
+    }
+
+    // 취소 시 result.data 가 null 이므로 진행 중 id 로 폴백한다.
+    private fun resolveResultWidgetId(data: Intent?): Int {
+        val fromData = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
+        return if (fromData != -1) fromData else inFlightWidgetId
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -142,8 +154,10 @@ class LockScreenActivity : ComponentActivity() {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_OPTIONS, options)
         }
         try {
+            inFlightWidgetId = appWidgetId
             bindWidgetLauncher.launch(bindIntent)
         } catch (_: ActivityNotFoundException) {
+            inFlightWidgetId = -1
             Toast.makeText(this, "위젯 바인딩을 처리할 수 없습니다", Toast.LENGTH_SHORT).show()
             cancelPending(appWidgetId)
         }
@@ -163,8 +177,10 @@ class LockScreenActivity : ComponentActivity() {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
         }
         try {
+            inFlightWidgetId = appWidgetId
             configureWidgetLauncher.launch(configureIntent)
         } catch (_: Exception) {
+            inFlightWidgetId = -1
             addHostedWidget(appWidgetId)
         }
     }
