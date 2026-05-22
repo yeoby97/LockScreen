@@ -21,6 +21,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -62,12 +63,16 @@ fun LlmLayoutSheet(
     onDismiss: () -> Unit,
     onResult: (LlmSuggestionResult) -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var loading by remember { mutableStateOf(false) }
+    // LLM 처리(loading) 중에는 스와이프/스크림 탭으로 시트가 내려가지 않도록 고정
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { !loading || it != SheetValue.Hidden },
+    )
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     var input by remember { mutableStateOf("") }
-    var loading by remember { mutableStateOf(false) }
     var stepMessage by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var catalog by remember { mutableStateOf<LlmCatalog?>(null) }
