@@ -114,6 +114,7 @@ fun LockScreen(
     appWidgetManager: AppWidgetManager? = null,
     onRealWidgetSelected: (AppWidgetProviderInfo, Offset) -> Unit = { _, _ -> },
     onRemoveHosted: (String) -> Unit = {},
+    cancelledRealComponents: SnapshotStateList<String> = mutableStateListOf(),
 ) {
     val context = LocalContext.current
     var isFloating by remember { mutableStateOf(false) }
@@ -195,6 +196,16 @@ fun LockScreen(
     fun releaseGhostFor(uid: String) {
         val key = ghostOriginByUid.remove(uid) ?: return
         consumedGhostKeys.remove(key)
+    }
+
+    // 바인딩/설정을 거부해 위젯이 실제로 설치되지 않은 경우, 탭 시 소비했던 ghost 를 추천 목록에 복원.
+    LaunchedEffect(cancelledRealComponents.size) {
+        if (cancelledRealComponents.isEmpty()) return@LaunchedEffect
+        cancelledRealComponents.forEach { comp ->
+            consumedGhostKeys.remove(realWidgetGhostKey(comp))
+            pendingRealComponents.remove(comp)
+        }
+        cancelledRealComponents.clear()
     }
 
     // 새로 추가된 hosted widget 이 pending real ghost 의 결과면 uid → ghost key 매핑 기록.

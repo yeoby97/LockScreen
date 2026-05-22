@@ -31,16 +31,16 @@ class LockScreenActivity : ComponentActivity() {
 
     private val hostedWidgets: SnapshotStateList<HostedAppWidget> = mutableStateListOf()
     private val pendingOffsetsByWidgetId = mutableMapOf<Int, Offset>()
+    private val pendingComponentsByWidgetId = mutableMapOf<Int, String>()
+    // 바인딩 거부로 취소된 위젯 component (LockScreen 이 관찰해 추천 ghost 복원)
+    private val cancelledComponents: SnapshotStateList<String> = mutableStateListOf()
 
     private val bindWidgetLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
         val id = result.data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
         if (result.resultCode == Activity.RESULT_OK && id != -1) configureOrAdd(id)
-        else if (id != -1) {
-            pendingOffsetsByWidgetId.remove(id)
-            appWidgetHost.deleteAppWidgetId(id)
-        }
+        else if (id != -1) cancelPending(id)
     }
 
     private val configureWidgetLauncher = registerForActivityResult(
@@ -48,10 +48,7 @@ class LockScreenActivity : ComponentActivity() {
     ) { result ->
         val id = result.data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
         if (result.resultCode == Activity.RESULT_OK && id != -1) addHostedWidget(id)
-        else if (id != -1) {
-            pendingOffsetsByWidgetId.remove(id)
-            appWidgetHost.deleteAppWidgetId(id)
-        }
+        else if (id != -1) cancelPending(id)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -74,6 +71,7 @@ class LockScreenActivity : ComponentActivity() {
                         appWidgetManager = appWidgetManager,
                         onRealWidgetSelected = ::onProviderSelected,
                         onRemoveHosted = ::removeHosted,
+                        cancelledRealComponents = cancelledComponents,
                     )
                 }
             }
@@ -125,6 +123,7 @@ class LockScreenActivity : ComponentActivity() {
     private fun onProviderSelected(info: AppWidgetProviderInfo, preferredOffset: Offset) {
         val appWidgetId = appWidgetHost.allocateAppWidgetId()
         pendingOffsetsByWidgetId[appWidgetId] = preferredOffset
+        pendingComponentsByWidgetId[appWidgetId] = info.provider.flattenToShortString()
         val (minWdp, minHdp) = resolveWidgetSizeDp(info)
         val options = sizeOptionsBundle(minWdp, minHdp)
 
@@ -146,15 +145,13 @@ class LockScreenActivity : ComponentActivity() {
             bindWidgetLauncher.launch(bindIntent)
         } catch (_: ActivityNotFoundException) {
             Toast.makeText(this, "위젯 바인딩을 처리할 수 없습니다", Toast.LENGTH_SHORT).show()
-            pendingOffsetsByWidgetId.remove(appWidgetId)
-            appWidgetHost.deleteAppWidgetId(appWidgetId)
+            cancelPending(appWidgetId)
         }
     }
 
     private fun configureOrAdd(appWidgetId: Int) {
         val info = appWidgetManager.getAppWidgetInfo(appWidgetId) ?: run {
-            pendingOffsetsByWidgetId.remove(appWidgetId)
-            appWidgetHost.deleteAppWidgetId(appWidgetId); return
+            cancelPending(appWidgetId); return
         }
         val configure = info.configure
         if (configure == null) {
@@ -179,6 +176,7 @@ class LockScreenActivity : ComponentActivity() {
         try { appWidgetManager.updateAppWidgetOptions(appWidgetId, options) } catch (_: Exception) {}
         val d = resources.displayMetrics.density
         val preferredOffset = pendingOffsetsByWidgetId.remove(appWidgetId) ?: Offset(200f, 600f)
+        pendingComponentsByWidgetId.remove(appWidgetId)
         hostedWidgets.add(
             HostedAppWidget(
                 uid = "hosted_${appWidgetId}_${System.currentTimeMillis()}",
@@ -189,6 +187,13 @@ class LockScreenActivity : ComponentActivity() {
                 offset = preferredOffset,
             ),
         )
+    }
+
+    // 바인딩/설정 취소 시 위젯 ID 정리 + 소비됐던 추천 ghost 복원 신호
+    private fun cancelPending(appWidgetId: Int) {
+        pendingComponentsByWidgetId.remove(appWidgetId)?.let { cancelledComponents.add(it) }
+        pendingOffsetsByWidgetId.remove(appWidgetId)
+        appWidgetHost.deleteAppWidgetId(appWidgetId)
     }
 
     private fun removeHosted(uid: String) {
