@@ -39,6 +39,7 @@ fun WidgetSlotRow(
     slotGap: Dp,
     onRemove: (String) -> Unit,
     onAdd: () -> Unit,
+    modifier: Modifier = Modifier,
     trayGhosts: List<GhostInstance> = emptyList(),
     consumedGhostKeys: Set<String> = emptySet(),
     onGhostTap: (GhostInstance) -> Unit = {},
@@ -61,7 +62,7 @@ fun WidgetSlotRow(
 
     Row(
         horizontalArrangement = Arrangement.spacedBy(slotGap, Alignment.CenterHorizontally),
-        modifier = Modifier.then(frame).fillMaxWidth(0.5f).height(slotSize + 2.dp),
+        modifier = modifier.then(frame).fillMaxWidth(0.5f).height(slotSize + 2.dp),
     ) {
         placedWidgets.forEach { placed ->
             val span = if (placed.widget.size == WidgetSize.WIDE) 2 else 1

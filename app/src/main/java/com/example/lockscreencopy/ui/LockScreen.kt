@@ -47,11 +47,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
@@ -148,6 +150,12 @@ fun LockScreen(
 
     var clockOffset by remember { mutableStateOf(Offset.Zero) }
     var clockNaturalPosition by remember { mutableStateOf(Offset.Zero) }
+
+    // 점유영역 실측용 좌표 (스케일 Box 기준 프레임 + 각 UI 요소)
+    var contentRootCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var clockBoundsCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var slotRowCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var bottomBarCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var greenBoxOffset by remember { mutableStateOf(Offset.Zero) }
     var savedClockOffset by remember { mutableStateOf(Offset.Zero) }
     var clockScale by remember { mutableStateOf(1f) }
@@ -326,16 +334,43 @@ fun LockScreen(
     val slotGap = 8.dp
     val slotSize = screenWidth * 0.1f
 
+    val occupiedMarginPx = with(density) { 8.dp.toPx() }
+    // 스케일 Box 로컬 공간(= ghost offset 공간)으로 자식 bounds 변환. scale/transformOrigin 무관.
+    fun measuredBounds(child: LayoutCoordinates?): RectBounds? {
+        val root = contentRootCoords ?: return null
+        if (!root.isAttached || child == null || !child.isAttached) return null
+        val r: Rect = root.localBoundingBoxOf(child, clipBounds = false)
+        if (r.width <= 0f || r.height <= 0f) return null
+        return RectBounds(
+            left = r.left - occupiedMarginPx,
+            top = r.top - occupiedMarginPx,
+            right = r.right + occupiedMarginPx,
+            bottom = r.bottom + occupiedMarginPx,
+        )
+    }
+
     fun currentOccupiedRects(): List<RectBounds> = buildList {
         val slotSizePx = with(density) { slotSize.toPx() }
         val slotGapPx = with(density) { slotGap.toPx() }
-        val slotRowWidth = slotSizePx * 4f + slotGapPx * 3f
-        val slotRowLeft = (screenWidthPx - slotRowWidth) / 2f
-        val slotRowTop = screenHeightPx * 0.32f
-        add(RectBounds(slotRowLeft, slotRowTop, slotRowLeft + slotRowWidth, slotRowTop + slotSizePx))
-        // 상단 시계 영역 및 하단 LockStarBar/바로가기 영역도 점유영역으로 간주
-        add(RectBounds(screenWidthPx * 0.2f, screenHeightPx * 0.08f, screenWidthPx * 0.8f, screenHeightPx * 0.3f))
-        add(RectBounds(screenWidthPx * 0.12f, screenHeightPx * 0.78f, screenWidthPx * 0.88f, screenHeightPx * 0.96f))
+        // 시계: 실측 우선, 첫 프레임 등 미측정 시 추정 분수로 폴백
+        add(
+            measuredBounds(clockBoundsCoords)
+                ?: RectBounds(screenWidthPx * 0.2f, screenHeightPx * 0.08f, screenWidthPx * 0.8f, screenHeightPx * 0.3f),
+        )
+        // 슬롯행(트레이)
+        add(
+            measuredBounds(slotRowCoords) ?: run {
+                val slotRowWidth = slotSizePx * 4f + slotGapPx * 3f
+                val slotRowLeft = (screenWidthPx - slotRowWidth) / 2f
+                val slotRowTop = screenHeightPx * 0.32f
+                RectBounds(slotRowLeft, slotRowTop, slotRowLeft + slotRowWidth, slotRowTop + slotSizePx)
+            },
+        )
+        // 하단 LockStarBar/바로가기
+        add(
+            measuredBounds(bottomBarCoords)
+                ?: RectBounds(screenWidthPx * 0.12f, screenHeightPx * 0.78f, screenWidthPx * 0.88f, screenHeightPx * 0.96f),
+        )
         addAll(floatingWidgets.map { placed ->
             val width = with(density) {
                 (if (placed.widget.size == WidgetSize.WIDE) 180.dp else 100.dp).toPx() * placed.scaleX
@@ -398,6 +433,8 @@ fun LockScreen(
                     scaleX = scale; scaleY = scale
                     transformOrigin = TransformOrigin(0.5f, 0.2f)
                 }
+                // graphicsLayer 안쪽이어야 자식(ghost)과 같은 pre-scale 공간이 됨
+                .onGloballyPositioned { contentRootCoords = it }
                 .clip(RoundedCornerShape(cornerRadius))
                 .pointerInput(Unit) {
                     detectTapGestures(onPress = {
@@ -471,6 +508,7 @@ fun LockScreen(
                     ) {
                         Box(
                             modifier = Modifier
+                                .onGloballyPositioned { clockBoundsCoords = it }
                                 .border(1.dp, Color.White.copy(alpha = 0.7f * editAlpha), RoundedCornerShape(12.dp))
                                 .padding(8.dp),
                         ) {
@@ -490,6 +528,7 @@ fun LockScreen(
                             isFloating = isFloating,
                             slotSize = slotSize,
                             slotGap = slotGap,
+                            modifier = Modifier.onGloballyPositioned { slotRowCoords = it },
                             onRemove = { uid ->
                                 slotWidgets = slotWidgets.filter { it.uid != uid }
                                 releaseGhostFor(uid)
@@ -515,6 +554,7 @@ fun LockScreen(
                 if (isFloating) {
                     Box(
                         modifier = Modifier
+                            .onGloballyPositioned { bottomBarCoords = it }
                             .graphicsLayer { alpha = editAlpha }
                             .padding(bottom = screenHeight * 0.05f)
                             .offset { IntOffset(greenBoxOffset.x.roundToInt(), greenBoxOffset.y.roundToInt()) }
