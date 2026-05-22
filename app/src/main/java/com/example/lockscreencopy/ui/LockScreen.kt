@@ -72,7 +72,11 @@ import com.example.lockscreencopy.model.HostedAppWidget
 import com.example.lockscreencopy.model.PlacedWidget
 import com.example.lockscreencopy.model.WidgetSize
 import com.example.lockscreencopy.data.handleSystemAction
+import com.example.lockscreencopy.data.hasUsageStatsPermission
 import com.example.lockscreencopy.data.launchAppShortcut
+import com.example.lockscreencopy.data.loadWeeklyUsage
+import com.example.lockscreencopy.data.openUsageAccessSettings
+import com.example.lockscreencopy.data.sortFavoritesByUsageWithGap
 import com.example.lockscreencopy.ui.llm.GhostInstance
 import com.example.lockscreencopy.ui.llm.LlmAppStrip
 import com.example.lockscreencopy.ui.llm.LlmRealWidgetGhost
@@ -100,7 +104,9 @@ import com.example.lockscreencopy.ui.widget.LockStarBar
 import com.example.lockscreencopy.ui.widget.ResizeHandles
 import com.example.lockscreencopy.ui.widget.WidgetSlotRow
 import com.example.lockscreencopy.ui.theme.LockScreenCopyTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlin.math.roundToInt
 
@@ -125,8 +131,27 @@ fun LockScreen(
     var favoriteApps by remember { mutableStateOf(listOf<BottomShortcut>()) }
     var favoriteAppsEnabled by remember { mutableStateOf(true) }
     var favoriteAppsLayout by remember { mutableStateOf(FavoriteAppsLayout.BOTTOM_LEFT) }
+    var favoriteAppsUsageSort by remember { mutableStateOf(false) }
+    var weeklyUsage by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
     var showFavoriteSettings by remember { mutableStateOf(false) }
     var showFavoritePicker by remember { mutableStateOf(false) }
+
+    LaunchedEffect(favoriteAppsUsageSort) {
+        if (favoriteAppsUsageSort) {
+            if (!hasUsageStatsPermission(context)) {
+                openUsageAccessSettings(context)
+                weeklyUsage = emptyMap()
+            } else {
+                weeklyUsage = withContext(Dispatchers.IO) { loadWeeklyUsage(context) }
+            }
+        }
+    }
+
+    val displayedFavorites = if (favoriteAppsUsageSort && weeklyUsage.isNotEmpty()) {
+        sortFavoritesByUsageWithGap(favoriteApps, weeklyUsage)
+    } else {
+        favoriteApps
+    }
 
     var leftShortcut by remember { mutableStateOf<BottomShortcut?>(null) }
     var rightShortcut by remember { mutableStateOf<BottomShortcut?>(null) }
@@ -635,7 +660,7 @@ fun LockScreen(
                 }
             }
 
-            if (favoriteAppsEnabled && favoriteApps.isNotEmpty()) {
+            if (favoriteAppsEnabled && displayedFavorites.isNotEmpty()) {
                 val favAlign = when (favoriteAppsLayout) {
                     FavoriteAppsLayout.BOTTOM_LEFT -> Alignment.BottomStart
                     FavoriteAppsLayout.BOTTOM_RIGHT -> Alignment.BottomEnd
@@ -664,7 +689,7 @@ fun LockScreen(
                             else Modifier,
                         ),
                 ) {
-                    FavoriteAppsDisplay(favorites = favoriteApps, layout = favoriteAppsLayout)
+                    FavoriteAppsDisplay(favorites = displayedFavorites, layout = favoriteAppsLayout)
                 }
             }
 
@@ -806,6 +831,8 @@ fun LockScreen(
                 onLayoutChange = { favoriteAppsLayout = it },
                 onOpenPicker = { showFavoritePicker = true },
                 onDismiss = { showFavoriteSettings = false },
+                usageSortEnabled = favoriteAppsUsageSort,
+                onUsageSortChange = { favoriteAppsUsageSort = it },
             )
         }
 
