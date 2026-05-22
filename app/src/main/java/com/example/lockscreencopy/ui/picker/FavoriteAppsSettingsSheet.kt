@@ -52,6 +52,8 @@ fun FavoriteAppsSettingsSheet(
     onLayoutChange: (FavoriteAppsLayout) -> Unit,
     onOpenPicker: () -> Unit,
     onDismiss: () -> Unit,
+    usageSortEnabled: Boolean,
+    onUsageSortChange: (Boolean) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
@@ -104,7 +106,34 @@ fun FavoriteAppsSettingsSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "사용시간 기반 동기화",
+                        color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        "최근 일주일 사용시간 순으로 표시 (간격이 크면 일부만 노출)",
+                        color = Color(0xFF8E8E93), fontSize = 12.sp,
+                    )
+                }
+                Switch(
+                    checked = usageSortEnabled,
+                    onCheckedChange = onUsageSortChange,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Color(0xFF1976D2),
+                        uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = Color(0xFF5A5A5C),
+                    ),
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
             Text("정렬", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -192,7 +221,7 @@ private fun LayoutPreviewBottomLeft() {
             modifier = Modifier.align(Alignment.BottomStart),
             horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            repeat(6) { Dot() }
+            repeat(3) { Dot() }
         }
     }
 }
@@ -204,7 +233,7 @@ private fun LayoutPreviewLeftVertical() {
             modifier = Modifier.align(Alignment.CenterStart),
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            repeat(6) { Dot() }
+            repeat(3) { Dot() }
         }
     }
 }
@@ -216,7 +245,7 @@ private fun LayoutPreviewBottomRight() {
             modifier = Modifier.align(Alignment.BottomEnd),
             horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            repeat(6) { Dot() }
+            repeat(3) { Dot() }
         }
     }
 }
