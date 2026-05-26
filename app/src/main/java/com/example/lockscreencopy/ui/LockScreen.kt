@@ -71,6 +71,10 @@ import com.example.lockscreencopy.model.FloatingWidget
 import com.example.lockscreencopy.model.HostedAppWidget
 import com.example.lockscreencopy.model.PlacedWidget
 import com.example.lockscreencopy.model.WidgetSize
+import com.example.lockscreencopy.data.GeminiClient
+import com.example.lockscreencopy.data.LlmCatalog
+import com.example.lockscreencopy.data.RealAppWidgets
+import com.example.lockscreencopy.data.buildLlmCatalog
 import com.example.lockscreencopy.data.handleSystemAction
 import com.example.lockscreencopy.data.hasUsageStatsPermission
 import com.example.lockscreencopy.data.launchAppShortcut
@@ -86,6 +90,7 @@ import com.example.lockscreencopy.ui.llm.ShortcutRecommendationBadge
 import com.example.lockscreencopy.ui.llm.StripAppEntry
 import com.example.lockscreencopy.ui.llm.placeGhostRects
 import com.example.lockscreencopy.ui.llm.realWidgetGhostKey
+import com.example.lockscreencopy.ui.sketch.SketchModeOverlay
 import com.example.lockscreencopy.ui.widget.toBitmapSafe
 import com.example.lockscreencopy.ui.picker.BottomShortcutPickerSheet
 import com.example.lockscreencopy.ui.picker.FavoriteAppsPickerScreen
@@ -107,11 +112,26 @@ import com.example.lockscreencopy.ui.widget.WidgetSlotRow
 import com.example.lockscreencopy.ui.theme.LockScreenCopyTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import androidx.compose.runtime.rememberCoroutineScope
 import kotlin.math.roundToInt
 
 private enum class ShortcutSide { LEFT, RIGHT }
+
+private data class SketchCandidate(
+    val packageName: String,
+    val appLabel: String,
+    val appIcon: android.graphics.drawable.Drawable?,
+    val provider: AppWidgetProviderInfo,
+)
+
+private data class SketchSuggestion(
+    val rect: Rect,
+    val userQuery: String,
+    val candidates: List<SketchCandidate>,
+)
 
 @Composable
 fun LockScreen(
@@ -175,6 +195,20 @@ fun LockScreen(
 
     var showLlmSheet by remember { mutableStateOf(false) }
     var llmSuggestion by remember { mutableStateOf<LlmSuggestionResult?>(null) }
+
+    var sketchMode by remember { mutableStateOf(false) }
+    var sketchLoading by remember { mutableStateOf(false) }
+    var sketchError by remember { mutableStateOf<String?>(null) }
+    var sketchSuggestion by remember { mutableStateOf<SketchSuggestion?>(null) }
+    var sketchActiveAppId by remember(sketchSuggestion) { mutableStateOf<String?>(null) }
+    var sketchCatalog by remember { mutableStateOf<LlmCatalog?>(null) }
+    val sketchScope = rememberCoroutineScope()
+
+    LaunchedEffect(sketchMode) {
+        if (sketchMode && sketchCatalog == null) {
+            sketchCatalog = withContext(Dispatchers.IO) { buildLlmCatalog(context) }
+        }
+    }
 
     var addCounter by remember { mutableStateOf(0) }
 
@@ -794,6 +828,17 @@ fun LockScreen(
                     when (choice) {
                         ShortcutChoice.RealWidget -> showRealWidgetPicker = true
                         ShortcutChoice.FavoriteApp -> showFavoriteSettings = true
+                        ShortcutChoice.Sketch -> {
+                            // 사용자가 실제 화면 좌표를 기준으로 영역을 그릴 수 있도록 편집 모드 종료
+                            clockOffset = savedClockOffset
+                            clockScale = savedClockScale
+                            favoriteAppsOffset = savedFavoriteAppsOffset
+                            greenBoxOffset = Offset.Zero
+                            selectedFloatingUid = null
+                            isFloating = false
+                            sketchError = null
+                            sketchMode = true
+                        }
                         ShortcutChoice.Text -> {}
                     }
                 },
@@ -865,7 +910,7 @@ fun LockScreen(
             )
         }
 
-        if (!isFloating && llmSuggestion == null) {
+        if (!isFloating && llmSuggestion == null && !sketchMode && sketchSuggestion == null) {
             FloatingActionButton(
                 onClick = { showLlmSheet = true },
                 containerColor = Color(0xFF4DAAED),
@@ -909,6 +954,113 @@ fun LockScreen(
                 onSelect = { info ->
                     showRealWidgetPicker = false
                     onRealWidgetSelected(info, availableOffsetFor(info))
+                },
+            )
+        }
+
+        sketchSuggestion?.let { s ->
+            val active = sketchActiveAppId?.let { id ->
+                s.candidates.firstOrNull { it.packageName == id }
+            } ?: s.candidates.first()
+            LlmRealWidgetGhost(
+                info = active.provider,
+                offset = Offset(s.rect.left, s.rect.top),
+                width = with(density) { (s.rect.right - s.rect.left).toDp() },
+                height = with(density) { (s.rect.bottom - s.rect.top).toDp() },
+                onTap = {
+                    val offset = Offset(s.rect.left, s.rect.top)
+                    sketchSuggestion = null
+                    sketchActiveAppId = null
+                    onRealWidgetSelected(active.provider, offset)
+                },
+            )
+            LlmAppStrip(
+                apps = s.candidates.map { c ->
+                    StripAppEntry(
+                        id = c.packageName,
+                        name = c.appLabel,
+                        iconBg = Color(0xFF424242),
+                        iconBitmap = c.appIcon?.toBitmapSafe(),
+                        realPackages = listOf(c.packageName),
+                    )
+                },
+                selectedAppId = active.packageName,
+                onSelect = { pkg -> sketchActiveAppId = pkg ?: s.candidates.first().packageName },
+                onClose = {
+                    sketchSuggestion = null
+                    sketchActiveAppId = null
+                },
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 6.dp, top = 60.dp, bottom = 60.dp),
+            )
+        }
+
+        if (sketchMode) {
+            SketchModeOverlay(
+                loading = sketchLoading,
+                error = sketchError,
+                onCancel = {
+                    sketchMode = false
+                    sketchLoading = false
+                    sketchError = null
+                },
+                onConfirm = { rect, query ->
+                    val cat = sketchCatalog
+                    if (cat == null) {
+                        sketchError = "카탈로그를 불러오는 중입니다. 잠시 후 다시 시도하세요."
+                        return@SketchModeOverlay
+                    }
+                    sketchError = null
+                    sketchLoading = true
+                    sketchScope.launch {
+                        try {
+                            val ids = GeminiClient.recommendApps(query, cat.firstStepEntries())
+                            val selected = cat.resolveSelectedApps(ids)
+                            val pmRef = context.packageManager
+                            val floatingPrompt = selected.floatingEntriesForPrompt(pmRef)
+                            if (floatingPrompt.isEmpty()) {
+                                sketchError = "AI가 추천한 실제 위젯이 없어요. 더 구체적으로 입력해 보세요."
+                                sketchLoading = false
+                                return@launch
+                            }
+                            val rec = GeminiClient.recommendWidgets(
+                                userQuery = query,
+                                trayCandidates = emptyList(),
+                                floatingCandidates = floatingPrompt,
+                                shortcutCandidates = emptyList(),
+                            )
+                            val recComponents = rec.floating.toHashSet()
+                            val picked: List<SketchCandidate> = selected.realApps.flatMap { ra: RealAppWidgets ->
+                                ra.providers
+                                    .filter { it.provider.flattenToShortString() in recComponents }
+                                    .map { info ->
+                                        SketchCandidate(
+                                            packageName = ra.packageName,
+                                            appLabel = ra.appLabel,
+                                            appIcon = ra.appIcon,
+                                            provider = info,
+                                        )
+                                    }
+                            }.distinctBy { it.packageName }
+                            if (picked.isEmpty()) {
+                                sketchError = "추천된 위젯을 찾을 수 없어요."
+                                sketchLoading = false
+                                return@launch
+                            }
+                            sketchSuggestion = SketchSuggestion(
+                                rect = rect,
+                                userQuery = query,
+                                candidates = picked,
+                            )
+                            sketchActiveAppId = picked.first().packageName
+                            sketchLoading = false
+                            sketchMode = false
+                        } catch (t: Throwable) {
+                            sketchLoading = false
+                            sketchError = t.message ?: t.toString()
+                        }
+                    }
                 },
             )
         }
