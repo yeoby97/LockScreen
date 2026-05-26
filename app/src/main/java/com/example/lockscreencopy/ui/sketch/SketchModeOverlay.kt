@@ -3,11 +3,13 @@ package com.example.lockscreencopy.ui.sketch
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,10 +17,13 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,10 +34,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
@@ -48,7 +55,8 @@ import kotlin.math.roundToInt
  * 해당 텍스트로 AI 위젯을 추천받게 해주는 오버레이.
  *
  * Phase 1: 화면 어둡게 + 드래그로 직사각형 영역 지정
- * Phase 2: 직사각형 중앙에 텍스트 입력칸 + 확인/다시그리기 버튼
+ * Phase 2: 직사각형 안쪽 = 텍스트 입력칸(로딩 시 인디케이터로 대체),
+ *          우상단 X = 다시 그리기, 상자 바깥 아래/위 = 확인 버튼
  */
 @Composable
 fun SketchModeOverlay(
@@ -63,6 +71,8 @@ fun SketchModeOverlay(
     var query by remember { mutableStateOf("") }
 
     val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+    val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
     val minSidePx = with(density) { 140.dp.toPx() }
 
     BackHandler(enabled = !loading) {
@@ -155,28 +165,49 @@ fun SketchModeOverlay(
         rect?.let { r ->
             val w = r.right - r.left
             val h = r.bottom - r.top
+            val rectWidthDp = with(density) { w.toDp() }
+            val rectHeightDp = with(density) { h.toDp() }
+            val xButtonSizePx = with(density) { 22.dp.toPx() }
+            val confirmGapPx = with(density) { 16.dp.toPx() }
+            val confirmEstimatedHeightPx = with(density) { 56.dp.toPx() }
+
+            // 사각형 본체 + 내부에 텍스트 입력(또는 로딩 인디케이터)
             Box(
                 modifier = Modifier
                     .offset { IntOffset(r.left.roundToInt(), r.top.roundToInt()) }
-                    .size(
-                        width = with(density) { w.toDp() },
-                        height = with(density) { h.toDp() },
-                    )
+                    .size(width = rectWidthDp, height = rectHeightDp)
                     .background(Color.White.copy(alpha = 0.08f))
                     .border(2.dp, Color(0xFF4DAAED), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                ) {
+                if (loading) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            "AI가 위젯을 찾는 중...",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                } else {
                     OutlinedTextField(
                         value = query,
                         onValueChange = { query = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !loading,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp),
                         placeholder = {
                             Text(
                                 "위젯 이름/용도 (예: 날씨, 음악)",
@@ -186,42 +217,74 @@ fun SketchModeOverlay(
                         },
                         singleLine = true,
                     )
-                    Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedButton(
-                            enabled = !loading,
-                            onClick = {
-                                rect = null
-                                query = ""
-                            },
-                        ) { Text("다시 그리기", color = Color.White, fontSize = 12.sp) }
-                        Spacer(Modifier.width(8.dp))
-                        Button(
-                            enabled = !loading && query.isNotBlank(),
-                            onClick = { onConfirm(r, query) },
-                        ) {
-                            Text(if (loading) "검색 중..." else "확인", fontSize = 12.sp)
-                        }
-                    }
-                    if (loading) {
-                        Spacer(Modifier.height(8.dp))
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = Color.White,
-                        )
-                    }
-                    error?.let {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            it,
-                            color = Color(0xFFFF6B6B),
-                            fontSize = 11.sp,
-                        )
-                    }
                 }
             }
 
-            // 사각형 밖에도 취소 버튼 노출 (직사각형이 작거나 화면 가장자리일 때)
+            // 우상단 X (다시 그리기) — 위젯 삭제 버튼처럼 사각형 모서리에 걸침
+            if (!loading) {
+                Box(
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                (r.right - xButtonSizePx / 2f).roundToInt(),
+                                (r.top - xButtonSizePx / 2f).roundToInt(),
+                            )
+                        }
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFF453A))
+                        .clickable {
+                            rect = null
+                            query = ""
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = "다시 그리기",
+                        tint = Color.White,
+                        modifier = Modifier.size(12.dp),
+                    )
+                }
+            }
+
+            // 확인 버튼 — 사각형 바깥, 아래쪽에 우선 배치. 공간 없으면 위쪽.
+            val placeAbove = r.bottom + confirmGapPx + confirmEstimatedHeightPx > screenHeightPx
+            val confirmTopPx = if (placeAbove) {
+                r.top - confirmGapPx - confirmEstimatedHeightPx
+            } else {
+                r.bottom + confirmGapPx
+            }
+            val confirmCenterX = (r.left + r.right) / 2f
+            val confirmButtonWidthPx = with(density) { 110.dp.toPx() }
+            Button(
+                enabled = !loading && query.isNotBlank(),
+                onClick = { onConfirm(r, query) },
+                modifier = Modifier
+                    .offset {
+                        IntOffset(
+                            (confirmCenterX - confirmButtonWidthPx / 2f).roundToInt(),
+                            confirmTopPx.roundToInt(),
+                        )
+                    }
+                    .width(110.dp)
+                    .defaultMinSize(minHeight = 48.dp),
+            ) {
+                Text("확인", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            }
+
+            error?.let {
+                Text(
+                    it,
+                    color = Color(0xFFFF6B6B),
+                    fontSize = 11.sp,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 24.dp, start = 16.dp, end = 16.dp),
+                )
+            }
+
+            // 화면 하단 전체 취소 (스케치 모드 종료)
             TextButton(
                 onClick = onCancel,
                 enabled = !loading,
