@@ -92,6 +92,8 @@ import com.example.lockscreencopy.ui.llm.placeGhostRects
 import com.example.lockscreencopy.ui.llm.realWidgetGhostKey
 import com.example.lockscreencopy.ui.sketch.SketchModeOverlay
 import com.example.lockscreencopy.ui.widget.toBitmapSafe
+import com.example.lockscreencopy.ui.picker.AiActionChoice
+import com.example.lockscreencopy.ui.picker.AiActionPickerDialog
 import com.example.lockscreencopy.ui.picker.BottomShortcutPickerSheet
 import com.example.lockscreencopy.ui.picker.FavoriteAppsPickerScreen
 import com.example.lockscreencopy.ui.picker.FavoriteAppsSettingsSheet
@@ -194,6 +196,7 @@ fun LockScreen(
     var addTarget by remember { mutableStateOf(AddTarget.SLOT) }
 
     var showLlmSheet by remember { mutableStateOf(false) }
+    var showAiChooser by remember { mutableStateOf(false) }
     var llmSuggestion by remember { mutableStateOf<LlmSuggestionResult?>(null) }
 
     var sketchMode by remember { mutableStateOf(false) }
@@ -202,6 +205,7 @@ fun LockScreen(
     var sketchSuggestion by remember { mutableStateOf<SketchSuggestion?>(null) }
     var sketchActiveAppId by remember(sketchSuggestion) { mutableStateOf<String?>(null) }
     var sketchCatalog by remember { mutableStateOf<LlmCatalog?>(null) }
+    var sketchPendingComponent by remember { mutableStateOf<String?>(null) }
     val sketchScope = rememberCoroutineScope()
 
     LaunchedEffect(sketchMode) {
@@ -267,8 +271,24 @@ fun LockScreen(
         cancelledRealComponents.forEach { comp ->
             consumedGhostKeys.remove(realWidgetGhostKey(comp))
             pendingRealComponents.remove(comp)
+            if (sketchPendingComponent == comp) sketchPendingComponent = null
         }
         cancelledRealComponents.clear()
+    }
+
+    // 스케치로 추가한 위젯이 실제로 hostedWidgets 에 들어왔으면 자동으로 편집(floating) 모드로 전환
+    // 해서 사용자가 바로 크기 조절/삭제할 수 있게 한다.
+    LaunchedEffect(hostedWidgets.size, sketchPendingComponent) {
+        val pending = sketchPendingComponent ?: return@LaunchedEffect
+        val just = hostedWidgets.firstOrNull {
+            it.providerInfo.provider.flattenToShortString() == pending
+        } ?: return@LaunchedEffect
+        sketchPendingComponent = null
+        if (!isFloating) {
+            clockOffset = savedClockOffset
+            isFloating = true
+        }
+        selectedFloatingUid = just.uid
     }
 
     // 새로 추가된 hosted widget 이 pending real ghost 의 결과면 uid → ghost key 매핑 기록.
@@ -828,17 +848,6 @@ fun LockScreen(
                     when (choice) {
                         ShortcutChoice.RealWidget -> showRealWidgetPicker = true
                         ShortcutChoice.FavoriteApp -> showFavoriteSettings = true
-                        ShortcutChoice.Sketch -> {
-                            // 사용자가 실제 화면 좌표를 기준으로 영역을 그릴 수 있도록 편집 모드 종료
-                            clockOffset = savedClockOffset
-                            clockScale = savedClockScale
-                            favoriteAppsOffset = savedFavoriteAppsOffset
-                            greenBoxOffset = Offset.Zero
-                            selectedFloatingUid = null
-                            isFloating = false
-                            sketchError = null
-                            sketchMode = true
-                        }
                         ShortcutChoice.Text -> {}
                     }
                 },
@@ -912,7 +921,7 @@ fun LockScreen(
 
         if (!isFloating && llmSuggestion == null && !sketchMode && sketchSuggestion == null) {
             FloatingActionButton(
-                onClick = { showLlmSheet = true },
+                onClick = { showAiChooser = true },
                 containerColor = Color(0xFF4DAAED),
                 contentColor = Color.White,
                 shape = CircleShape,
@@ -920,8 +929,24 @@ fun LockScreen(
                     .align(Alignment.BottomEnd)
                     .padding(end = 24.dp, bottom = screenHeight * 0.18f),
             ) {
-                Icon(Icons.Filled.AutoAwesome, contentDescription = "AI 위젯 배치")
+                Icon(Icons.Filled.AutoAwesome, contentDescription = "AI 위젯 도우미")
             }
+        }
+
+        if (showAiChooser) {
+            AiActionPickerDialog(
+                onDismiss = { showAiChooser = false },
+                onSelect = { choice ->
+                    showAiChooser = false
+                    when (choice) {
+                        AiActionChoice.LlmLayout -> showLlmSheet = true
+                        AiActionChoice.Sketch -> {
+                            sketchError = null
+                            sketchMode = true
+                        }
+                    }
+                },
+            )
         }
 
         if (showLlmSheet) {
@@ -969,8 +994,10 @@ fun LockScreen(
                 height = with(density) { (s.rect.bottom - s.rect.top).toDp() },
                 onTap = {
                     val offset = Offset(s.rect.left, s.rect.top)
+                    val component = active.provider.provider.flattenToShortString()
                     sketchSuggestion = null
                     sketchActiveAppId = null
+                    sketchPendingComponent = component
                     onRealWidgetSelected(active.provider, offset)
                 },
             )

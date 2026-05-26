@@ -19,12 +19,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 
-enum class ShortcutChoice { RealWidget, FavoriteApp, Text }
+enum class AiActionChoice { LlmLayout, Sketch }
 
 @Composable
-fun ShortcutPickerDialog(
+fun AiActionPickerDialog(
     onDismiss: () -> Unit,
-    onSelect: (ShortcutChoice) -> Unit,
+    onSelect: (AiActionChoice) -> Unit,
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(shape = RoundedCornerShape(20.dp), color = Color.White, shadowElevation = 8.dp) {
@@ -33,21 +33,17 @@ fun ShortcutPickerDialog(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    "추가할 항목 선택", fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                    "AI 위젯 도우미", fontSize = 18.sp, fontWeight = FontWeight.Bold,
                     color = Color.Black, modifier = Modifier.padding(bottom = 16.dp),
                 )
                 Button(
-                    onClick = { onSelect(ShortcutChoice.RealWidget) },
+                    onClick = { onSelect(AiActionChoice.LlmLayout) },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                ) { Text("앱 위젯") }
+                ) { Text("AI 위젯 배치") }
                 Button(
-                    onClick = { onSelect(ShortcutChoice.FavoriteApp) },
+                    onClick = { onSelect(AiActionChoice.Sketch) },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                ) { Text("즐겨찾는 앱") }
-                Button(
-                    onClick = { onSelect(ShortcutChoice.Text) },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                ) { Text("글 넣기") }
+                ) { Text("AI 스케치 (직접 위치 지정)") }
                 Spacer(modifier = Modifier.height(8.dp))
                 TextButton(onClick = onDismiss) { Text("취소") }
             }
