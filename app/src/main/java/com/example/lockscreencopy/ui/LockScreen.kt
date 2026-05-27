@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -63,12 +64,15 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.lockscreencopy.R
 import com.example.lockscreencopy.model.AddTarget
 import com.example.lockscreencopy.model.BottomShortcut
 import com.example.lockscreencopy.model.FavoriteAppsLayout
 import com.example.lockscreencopy.model.FloatingWidget
 import com.example.lockscreencopy.model.HostedAppWidget
+import com.example.lockscreencopy.model.NotificationItem
+import com.example.lockscreencopy.model.NudgeDisplayMode
 import com.example.lockscreencopy.model.PlacedWidget
 import com.example.lockscreencopy.model.WidgetSize
 import com.example.lockscreencopy.data.GeminiClient
@@ -81,7 +85,9 @@ import com.example.lockscreencopy.data.launchAppShortcut
 import com.example.lockscreencopy.data.loadInstalledApps
 import com.example.lockscreencopy.data.loadWeeklyUsage
 import com.example.lockscreencopy.data.openUsageAccessSettings
+import com.example.lockscreencopy.data.sampleNotifications
 import com.example.lockscreencopy.data.topUsedAppsWithGap
+import com.example.lockscreencopy.ui.notification.NudgeNotificationDisplay
 import com.example.lockscreencopy.ui.llm.GhostInstance
 import com.example.lockscreencopy.ui.llm.LlmAppStrip
 import com.example.lockscreencopy.ui.llm.LlmRealWidgetGhost
@@ -150,6 +156,9 @@ fun LockScreen(
     var showShortcutPopup by remember { mutableStateOf(false) }
     var showLockWidgetPicker by remember { mutableStateOf(false) }
     var showRealWidgetPicker by remember { mutableStateOf(false) }
+
+    val notifications by remember { mutableStateOf<List<NotificationItem>>(sampleNotifications()) }
+    var nudgeDisplayMode by remember { mutableStateOf(NudgeDisplayMode.CARD) }
 
     var favoriteApps by remember { mutableStateOf(listOf<BottomShortcut>()) }
     var favoriteAppsEnabled by remember { mutableStateOf(true) }
@@ -646,6 +655,13 @@ fun LockScreen(
 
                 }
 
+                Spacer(modifier = Modifier.height(12.dp))
+                NudgeNotificationDisplay(
+                    notifications = notifications,
+                    mode = nudgeDisplayMode,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
                 if (isFloating) {
                     Box(
                         modifier = Modifier
@@ -956,6 +972,17 @@ fun LockScreen(
             }
         }
 
+        if (isFloating) {
+            NudgeDisplayModeButton(
+                currentMode = nudgeDisplayMode,
+                onModeChange = { nudgeDisplayMode = it },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 24.dp, bottom = screenHeight * 0.28f)
+                    .graphicsLayer { alpha = editAlpha },
+            )
+        }
+
         if (showAiChooser) {
             AiActionPickerDialog(
                 onDismiss = { showAiChooser = false },
@@ -1136,5 +1163,52 @@ private fun EditModeTopBar(visible: Boolean, alpha: Float = 1f, onConfirm: () ->
     ) {
         Button(onClick = {}, enabled = visible) { Text("배경화면") }
         Button(onClick = onConfirm, enabled = visible) { Text("확인") }
+    }
+}
+
+@Composable
+private fun NudgeDisplayModeButton(
+    currentMode: NudgeDisplayMode,
+    onModeChange: (NudgeDisplayMode) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val nextMode = when (currentMode) {
+        NudgeDisplayMode.CARD -> NudgeDisplayMode.ICON
+        NudgeDisplayMode.ICON -> NudgeDisplayMode.DOT
+        NudgeDisplayMode.DOT  -> NudgeDisplayMode.CARD
+    }
+    val modeLabel = when (currentMode) {
+        NudgeDisplayMode.CARD -> "카드"
+        NudgeDisplayMode.ICON -> "아이콘"
+        NudgeDisplayMode.DOT  -> "점"
+    }
+    val nudgePurple = Color(0xFF9B78FF)
+
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        FloatingActionButton(
+            onClick = { onModeChange(nextMode) },
+            containerColor = nudgePurple,
+            contentColor = Color.White,
+            shape = CircleShape,
+            modifier = Modifier.size(48.dp),
+        ) {
+            Icon(Icons.Filled.AutoAwesome, contentDescription = "넛지 알림 표시 방식")
+        }
+        Spacer(Modifier.height(4.dp))
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.Black.copy(alpha = 0.5f))
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+        ) {
+            Text(
+                text = "넛지: $modeLabel",
+                color = Color.White,
+                fontSize = 10.sp,
+            )
+        }
     }
 }
