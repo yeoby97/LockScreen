@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import com.example.lockscreencopy.model.HostedAppWidget
 import com.example.lockscreencopy.ui.LockScreen
+import com.example.lockscreencopy.ui.resolveWidgetSizeDp
 import com.example.lockscreencopy.ui.theme.LockScreenCopyTheme
 
 class LockScreenActivity : ComponentActivity() {
@@ -104,26 +105,8 @@ class LockScreenActivity : ComponentActivity() {
         Toast.makeText(this, "Device unlocked!", Toast.LENGTH_SHORT).show()
     }
 
-    private fun resolveWidgetSizeDp(info: AppWidgetProviderInfo): Pair<Int, Int> {
-        val d = resources.displayMetrics.density
-        val cellDp = 70
-
-        var wDp = (info.minWidth / d).toInt()
-        var hDp = (info.minHeight / d).toInt()
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (info.targetCellWidth > 0) wDp = maxOf(wDp, info.targetCellWidth * cellDp)
-            if (info.targetCellHeight > 0) hDp = maxOf(hDp, info.targetCellHeight * cellDp)
-        }
-
-        if (wDp <= 0) wDp = (info.minResizeWidth / d).toInt()
-        if (hDp <= 0) hDp = (info.minResizeHeight / d).toInt()
-
-        if (wDp <= 0) wDp = 110
-        if (hDp <= 0) hDp = 110
-
-        return wDp to hDp
-    }
+    private fun resolveWidgetSizeDp(info: AppWidgetProviderInfo): Pair<Int, Int> =
+        resolveWidgetSizeDp(info, resources.displayMetrics.density)
 
     private fun sizeOptionsBundle(minWdp: Int, minHdp: Int): Bundle = Bundle().apply {
         putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, minWdp)

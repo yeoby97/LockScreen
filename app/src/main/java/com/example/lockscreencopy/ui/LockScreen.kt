@@ -239,10 +239,19 @@ fun LockScreen(
         selectedFloatingUid = null
         isFloating = false
         llmSuggestion = null
+        sketchSuggestion = null
+        sketchActiveAppId = null
     }
 
     LaunchedEffect(llmSuggestion) {
         if (llmSuggestion != null && !isFloating) {
+            clockOffset = savedClockOffset
+            isFloating = true
+        }
+    }
+
+    LaunchedEffect(sketchSuggestion) {
+        if (sketchSuggestion != null && !isFloating) {
             clockOffset = savedClockOffset
             isFloating = true
         }
@@ -422,9 +431,6 @@ fun LockScreen(
 
     val screenWidthPx = with(density) { screenWidth.toPx() }
     val screenHeightPx = with(density) { screenHeight.toPx() }
-    val fallbackRealGhostWidthPx = with(density) { 150.dp.toPx() }
-    val fallbackRealGhostHeightPx = with(density) { 110.dp.toPx() }
-
     val slotGap = 8.dp
     val slotSize = screenWidth * 0.1f
 
@@ -487,18 +493,11 @@ fun LockScreen(
         })
     }
 
+    // ghost 는 위젯이 실제로 호스트될 때의 크기와 정확히 일치해야 한다 — 그래야
+    // 사용자가 ghost 를 탭한 직후 위젯이 같은 자리/크기로 자리잡는다.
     fun ghostSizePx(info: AppWidgetProviderInfo): Pair<Float, Float> {
-        val minWdp = info.minWidth.coerceAtLeast(120)
-        val minHdp = info.minHeight.coerceAtLeast(80)
-        val w = with(density) { minWdp.dp.toPx() }.coerceIn(
-            minimumValue = fallbackRealGhostWidthPx * 0.8f,
-            maximumValue = screenWidthPx * 0.72f,
-        )
-        val h = with(density) { minHdp.dp.toPx() }.coerceIn(
-            minimumValue = fallbackRealGhostHeightPx * 0.8f,
-            maximumValue = screenHeightPx * 0.35f,
-        )
-        return w to h
+        val (wDp, hDp) = resolveWidgetSizeDp(info, density.density)
+        return with(density) { wDp.dp.toPx() to hDp.dp.toPx() }
     }
 
     // 수동 추가(피커) 위젯도 ghost 와 동일하게 이미 배치된 항목을 피해 자리 잡도록 계산
@@ -570,6 +569,8 @@ fun LockScreen(
                             selectedFloatingUid = null
                             isFloating = false
                             llmSuggestion = null
+                            sketchSuggestion = null
+                            sketchActiveAppId = null
                         },
                     )
 
@@ -716,6 +717,28 @@ fun LockScreen(
                         },
                     )
                 }
+            }
+
+            // 스케치로 그린 사각형 안에 추천 ghost 표시. 스케일 박스 내부라서 floating
+            // 모드 진입 시 자동으로 0.7배로 축소되어 다른 위젯들과 같은 비율로 보임.
+            sketchSuggestion?.let { s ->
+                val active = sketchActiveAppId?.let { id ->
+                    s.candidates.firstOrNull { it.packageName == id }
+                } ?: s.candidates.first()
+                val offset = Offset(s.rect.left, s.rect.top)
+                LlmRealWidgetGhost(
+                    info = active.provider,
+                    offset = offset,
+                    width = with(density) { (s.rect.right - s.rect.left).toDp() },
+                    height = with(density) { (s.rect.bottom - s.rect.top).toDp() },
+                    onTap = {
+                        val component = active.provider.provider.flattenToShortString()
+                        sketchSuggestion = null
+                        sketchActiveAppId = null
+                        sketchPendingComponent = component
+                        onRealWidgetSelected(active.provider, offset)
+                    },
+                )
             }
 
             if (favoriteAppsEnabled && displayedFavorites.isNotEmpty()) {
@@ -987,20 +1010,6 @@ fun LockScreen(
             val active = sketchActiveAppId?.let { id ->
                 s.candidates.firstOrNull { it.packageName == id }
             } ?: s.candidates.first()
-            LlmRealWidgetGhost(
-                info = active.provider,
-                offset = Offset(s.rect.left, s.rect.top),
-                width = with(density) { (s.rect.right - s.rect.left).toDp() },
-                height = with(density) { (s.rect.bottom - s.rect.top).toDp() },
-                onTap = {
-                    val offset = Offset(s.rect.left, s.rect.top)
-                    val component = active.provider.provider.flattenToShortString()
-                    sketchSuggestion = null
-                    sketchActiveAppId = null
-                    sketchPendingComponent = component
-                    onRealWidgetSelected(active.provider, offset)
-                },
-            )
             LlmAppStrip(
                 apps = s.candidates.map { c ->
                     StripAppEntry(
@@ -1019,7 +1028,8 @@ fun LockScreen(
                 },
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .padding(end = 6.dp, top = 60.dp, bottom = 60.dp),
+                    .padding(end = 6.dp, top = 60.dp, bottom = 60.dp)
+                    .graphicsLayer { alpha = editAlpha },
             )
         }
 
