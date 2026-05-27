@@ -1,11 +1,32 @@
 package com.example.lockscreencopy.ui
 
+import android.appwidget.AppWidgetProviderInfo
+import android.os.Build
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.example.lockscreencopy.model.FloatingWidget
 import com.example.lockscreencopy.model.HostedAppWidget
 import com.example.lockscreencopy.model.WidgetSize
+
+/**
+ * 위젯이 실제로 호스트될 때의 크기(dp). ghost(추천 미리보기) 크기를 이 값에
+ * 맞춰야 사용자가 ghost 를 탭한 직후 자리/크기가 변하지 않는다.
+ */
+internal fun resolveWidgetSizeDp(info: AppWidgetProviderInfo, densityScale: Float): Pair<Int, Int> {
+    val cellDp = 70
+    var wDp = (info.minWidth / densityScale).toInt()
+    var hDp = (info.minHeight / densityScale).toInt()
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (info.targetCellWidth > 0) wDp = maxOf(wDp, info.targetCellWidth * cellDp)
+        if (info.targetCellHeight > 0) hDp = maxOf(hDp, info.targetCellHeight * cellDp)
+    }
+    if (wDp <= 0) wDp = (info.minResizeWidth / densityScale).toInt()
+    if (hDp <= 0) hDp = (info.minResizeHeight / densityScale).toInt()
+    if (wDp <= 0) wDp = 110
+    if (hDp <= 0) hDp = 110
+    return wDp to hDp
+}
 
 internal fun resizeFloatingWidget(
     fw: FloatingWidget,

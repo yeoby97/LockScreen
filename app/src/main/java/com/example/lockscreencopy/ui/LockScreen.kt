@@ -431,9 +431,6 @@ fun LockScreen(
 
     val screenWidthPx = with(density) { screenWidth.toPx() }
     val screenHeightPx = with(density) { screenHeight.toPx() }
-    val fallbackRealGhostWidthPx = with(density) { 150.dp.toPx() }
-    val fallbackRealGhostHeightPx = with(density) { 110.dp.toPx() }
-
     val slotGap = 8.dp
     val slotSize = screenWidth * 0.1f
 
@@ -496,18 +493,11 @@ fun LockScreen(
         })
     }
 
+    // ghost 는 위젯이 실제로 호스트될 때의 크기와 정확히 일치해야 한다 — 그래야
+    // 사용자가 ghost 를 탭한 직후 위젯이 같은 자리/크기로 자리잡는다.
     fun ghostSizePx(info: AppWidgetProviderInfo): Pair<Float, Float> {
-        val minWdp = info.minWidth.coerceAtLeast(120)
-        val minHdp = info.minHeight.coerceAtLeast(80)
-        val w = with(density) { minWdp.dp.toPx() }.coerceIn(
-            minimumValue = fallbackRealGhostWidthPx * 0.8f,
-            maximumValue = screenWidthPx * 0.72f,
-        )
-        val h = with(density) { minHdp.dp.toPx() }.coerceIn(
-            minimumValue = fallbackRealGhostHeightPx * 0.8f,
-            maximumValue = screenHeightPx * 0.35f,
-        )
-        return w to h
+        val (wDp, hDp) = resolveWidgetSizeDp(info, density.density)
+        return with(density) { wDp.dp.toPx() to hDp.dp.toPx() }
     }
 
     // 수동 추가(피커) 위젯도 ghost 와 동일하게 이미 배치된 항목을 피해 자리 잡도록 계산
