@@ -29,6 +29,10 @@ object GeminiClient {
     private const val ENDPOINT =
         "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent"
 
+    private const val IMAGEN_MODEL = "imagen-3.0-generate-001"
+    private const val IMAGEN_ENDPOINT =
+        "https://generativelanguage.googleapis.com/v1beta/models/$IMAGEN_MODEL:predict"
+
     // HTTP/2 협상 실패로 인한 "Connection reset"을 피하기 위해 HTTP/1.1만 사용
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
@@ -125,6 +129,89 @@ object GeminiClient {
         """.trimIndent()
         val raw = callGemini(prompt)
         parseRecommendation(raw)
+    }
+
+    /**
+     * Imagen으로 위젯 배경 이미지를 생성한다.
+     * @param imageShape 사용자가 원하는 이미지 형상 설명 (예: "미니멀 원형 시계")
+     * @param infoItems  오버레이할 정보 항목 목록 (예: ["날씨", "온도", "습도"])
+     * @param aspectRatio 그린 사각형의 가로/세로 비율 (width / height)
+     * @return 생성된 이미지의 PNG 바이트 배열
+     */
+    suspend fun generateWidgetImage(
+        imageShape: String,
+        infoItems: List<String>,
+        aspectRatio: Float,
+    ): ByteArray = withContext(Dispatchers.IO) {
+        if (API_KEY.isBlank() || API_KEY == "YOUR_GEMINI_API_KEY") {
+            throw LlmException("Gemini API 키가 설정되지 않았습니다. GeminiClient.API_KEY를 채워주세요.")
+        }
+        val aspectStr = closestImagenAspectRatio(aspectRatio)
+        val infoText = infoItems.joinToString(", ")
+        val prompt = buildString {
+            append(imageShape.trim())
+            append(" style widget for a smartphone lock screen. ")
+            append("Transparent PNG background (alpha channel, no solid fill). ")
+            append("Includes ${infoItems.size} clearly outlined empty placeholder zones for: $infoText. ")
+            append("Each zone is a blank, framed area — text will be overlaid separately. ")
+            append("Minimalist, modern aesthetic. No actual text rendered inside image.")
+        }
+        val bodyJson = JSONObject().apply {
+            put("instances", JSONArray().put(JSONObject().put("prompt", prompt)))
+            put("parameters", JSONObject().apply {
+                put("sampleCount", 1)
+                put("aspectRatio", aspectStr)
+            })
+        }.toString()
+        val request = Request.Builder()
+            .url("$IMAGEN_ENDPOINT?key=$API_KEY")
+            .header("Content-Type", "application/json; charset=utf-8")
+            .post(bodyJson.toRequestBody(jsonMedia))
+            .build()
+        callImagenWithRetry(request)
+    }
+
+    private fun callImagenWithRetry(request: Request): ByteArray {
+        var lastErr: Throwable? = null
+        for (attempt in 1..MAX_ATTEMPTS) {
+            try {
+                client.newCall(request).execute().use { resp ->
+                    val raw = resp.body?.string().orEmpty()
+                    if (!resp.isSuccessful) {
+                        if (resp.code in 500..599 && attempt < MAX_ATTEMPTS) {
+                            lastErr = LlmException("서버 오류 ${resp.code}"); return@use
+                        }
+                        throw LlmException("Imagen 호출 실패 (${resp.code}): ${raw.take(300)}")
+                    }
+                    return parseImagenBytes(raw)
+                }
+            } catch (e: LlmException) {
+                throw e
+            } catch (e: IOException) {
+                lastErr = e
+                if (attempt >= MAX_ATTEMPTS) throw LlmException("네트워크 오류 (${e.message})", e)
+                Thread.sleep(300L * attempt)
+            }
+        }
+        throw LlmException("Imagen 호출 실패", lastErr)
+    }
+
+    private fun parseImagenBytes(raw: String): ByteArray {
+        val root = JSONObject(raw)
+        val predictions = root.optJSONArray("predictions")
+            ?: throw LlmException("Imagen 응답에 predictions 없음")
+        if (predictions.length() == 0) throw LlmException("Imagen 응답이 비어있습니다")
+        val encoded = predictions.getJSONObject(0).optString("bytesBase64Encoded", "")
+        if (encoded.isBlank()) throw LlmException("Imagen 이미지 데이터 없음")
+        return android.util.Base64.decode(encoded, android.util.Base64.DEFAULT)
+    }
+
+    private fun closestImagenAspectRatio(ratio: Float): String = when {
+        ratio >= 1.5f -> "16:9"
+        ratio >= 1.1f -> "4:3"
+        ratio >= 0.65f -> "1:1"
+        ratio >= 0.45f -> "3:4"
+        else -> "9:16"
     }
 
     private fun callGemini(prompt: String): String {

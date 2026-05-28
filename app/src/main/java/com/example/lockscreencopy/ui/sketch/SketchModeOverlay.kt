@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
@@ -51,24 +52,26 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
- * 사용자가 직접 위치/크기를 스케치한 뒤 위젯 이름을 입력하면
- * 해당 텍스트로 AI 위젯을 추천받게 해주는 오버레이.
+ * 사용자가 직접 위치/크기를 스케치한 뒤 두 가지 정보를 입력하면
+ * Imagen으로 AI 위젯 이미지를 생성한다.
  *
  * Phase 1: 화면 어둡게 + 드래그로 직사각형 영역 지정
- * Phase 2: 직사각형 안쪽 = 텍스트 입력칸(로딩 시 인디케이터로 대체),
- *          우상단 X = 다시 그리기, 상자 바깥 아래/위 = 확인 버튼
+ * Phase 2: 사각형 안쪽에 두 텍스트 입력칸 — "원하는 정보"(표시할 데이터),
+ *          "원하는 이미지 형상"(디자인 스타일). 로딩 시 인디케이터로 대체.
+ *          우상단 X = 다시 그리기, 사각형 바깥 아래/위 = 확인 버튼.
  */
 @Composable
 fun SketchModeOverlay(
     loading: Boolean,
     error: String?,
     onCancel: () -> Unit,
-    onConfirm: (rect: Rect, query: String) -> Unit,
+    onConfirm: (rect: Rect, infoQuery: String, imageShape: String) -> Unit,
 ) {
     var dragStart by remember { mutableStateOf<Offset?>(null) }
     var dragCurrent by remember { mutableStateOf<Offset?>(null) }
     var rect by remember { mutableStateOf<Rect?>(null) }
-    var query by remember { mutableStateOf("") }
+    var infoQuery by remember { mutableStateOf("") }
+    var imageShape by remember { mutableStateOf("") }
 
     val density = LocalDensity.current
     val configuration = LocalConfiguration.current
@@ -78,7 +81,8 @@ fun SketchModeOverlay(
     BackHandler(enabled = !loading) {
         if (rect != null) {
             rect = null
-            query = ""
+            infoQuery = ""
+            imageShape = ""
         } else {
             onCancel()
         }
@@ -195,28 +199,52 @@ fun SketchModeOverlay(
                         )
                         Spacer(Modifier.width(10.dp))
                         Text(
-                            "AI가 위젯을 찾는 중...",
+                            "AI 이미지 생성 중...",
                             color = Color.White,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                         )
                     }
                 } else {
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp),
-                        placeholder = {
-                            Text(
-                                "위젯 이름/용도 (예: 날씨, 음악)",
-                                color = Color.White.copy(alpha = 0.6f),
-                                fontSize = 12.sp,
-                            )
-                        },
-                        singleLine = true,
-                    )
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = infoQuery,
+                            onValueChange = { infoQuery = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = {
+                                Text("원하는 정보", color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp)
+                            },
+                            placeholder = {
+                                Text(
+                                    "예: 날씨, 온도, 습도",
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    fontSize = 11.sp,
+                                )
+                            },
+                            singleLine = true,
+                        )
+                        OutlinedTextField(
+                            value = imageShape,
+                            onValueChange = { imageShape = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = {
+                                Text("원하는 이미지 형상", color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp)
+                            },
+                            placeholder = {
+                                Text(
+                                    "예: 미니멀 원형 유리 카드",
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    fontSize = 11.sp,
+                                )
+                            },
+                            singleLine = true,
+                        )
+                    }
                 }
             }
 
@@ -235,7 +263,8 @@ fun SketchModeOverlay(
                         .background(Color(0xFFFF453A))
                         .clickable {
                             rect = null
-                            query = ""
+                            infoQuery = ""
+                            imageShape = ""
                         },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -258,8 +287,8 @@ fun SketchModeOverlay(
             val confirmCenterX = (r.left + r.right) / 2f
             val confirmButtonWidthPx = with(density) { 110.dp.toPx() }
             Button(
-                enabled = !loading && query.isNotBlank(),
-                onClick = { onConfirm(r, query) },
+                enabled = !loading && infoQuery.isNotBlank() && imageShape.isNotBlank(),
+                onClick = { onConfirm(r, infoQuery, imageShape) },
                 modifier = Modifier
                     .offset {
                         IntOffset(

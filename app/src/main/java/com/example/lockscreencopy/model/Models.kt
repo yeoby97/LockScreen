@@ -86,3 +86,15 @@ data class HostedAppWidget(
     val scaleX: Float = 1f,
     val scaleY: Float = 1f,
 )
+
+/** AI 스케치로 생성된 이미지 위젯. 이미지 + 텍스트 오버레이로 구성. */
+data class AiSketchWidget(
+    val uid: String,
+    val imageBitmap: android.graphics.Bitmap?,
+    val infoItems: List<String>,
+    val offset: Offset,
+    val widthDp: Float,
+    val heightDp: Float,
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
+)
