@@ -225,52 +225,57 @@ object GeminiClient {
             return@withContext fallbackScene(infoItems, imageShape, aspectRatio, aspectLabel)
         }
         runCatching {
-            val itemsText = infoItems.joinToString(", ") { "${it.label}=${it.value}" }
+            val itemCount = infoItems.size
+            // 슬롯 데이터는 slots JSON에만 쓰인다 — imagePrompt에 섞지 않기 위해 분리
+            val slotsData = infoItems.joinToString("\n") { "- ${it.label}=${it.value}" }
             val prompt = """
-                사용자가 잠금화면 위젯 스킨으로 원하는 모티프: "${imageShape.trim()}"
-                위젯에 표시할 정보 항목(레이블=값): $itemsText
-                위젯 가로:세로 비율: $aspectLabel
+                [이미지 디자인 정보] — imagePrompt 작성에만 사용하세요
+                - 모티프: "${imageShape.trim()}"
+                - 위젯 비율: $aspectLabel
+                - 필요한 blank text pad 수: $itemCount개
 
-                이 모티프를 바탕으로 "잠금화면 위젯 스킨 에셋"을 설계하세요.
-                전체 풍경 일러스트가 아니라, 락스크린 위젯에 바로 쓸 수 있는 큼직한 스킨입니다.
+                [슬롯 데이터] — slots JSON에만 사용하세요. imagePrompt에 절대 넣지 마세요.
+                $slotsData
 
-                절대 하지 마세요:
-                - 전체 배경 풍경(하늘·땅·지평선)을 만들지 마세요.
-                - 작은 오브젝트를 여러 개 흩뿌리지 마세요.
-                - 멀리서 본 풍경처럼 그리지 마세요.
+                위 정보를 바탕으로 "잠금화면 위젯 스킨 에셋"을 설계하세요.
+                이미지 스킨 위에 앱이 Compose 텍스트를 올리는 구조입니다.
 
-                반드시 해주세요:
-                - 1개의 dominant 오브젝트(또는 최대 3개)를 중심으로 구성하세요.
-                - 주요 오브젝트가 위젯 면적의 60~80%를 차지해야 합니다.
-                - 정보 항목마다 텍스트를 올릴 "large smooth text pad"를 오브젝트 위에 배치하세요.
-                - text pad는 흰색/크림색/부드러운 라벨/반투명 글래스 느낌이어도 됩니다.
-                - 각 text pad는 텍스트가 들어갈 만큼 충분히 넓어야 합니다 (w≥0.30, h≥0.16 권장).
-                - text pad 위에 글자/숫자를 절대 그리지 마세요. (텍스트는 앱이 Compose로 올립니다.)
-                - 배경은 투명. 단, 오브젝트의 카드 베이스나 글래스 패널은 허용.
+                ⚠️ imagePrompt 필수 금지 사항 (어기면 이미지에 글자가 생성됩니다):
+                - [슬롯 데이터]의 레이블·값·카테고리명을 imagePrompt에 넣지 마세요.
+                - TEMPERATURE, RAIN, BATTERY, STEPS, WEATHER, UV, 온도, 비, 배터리 등
+                  어떤 정보 카테고리 단어도 imagePrompt에 들어가면 안 됩니다.
+                - "reserved for RAIN", "label for BATTERY" 같은 표현도 금지입니다.
+                - text pad는 시각적 외관만 묘사하세요: "blank smooth oval", "empty cream panel" 등.
+                - text pad에는 반드시 "completely blank", "empty" 표현을 붙이세요.
 
-                좌표 규칙:
-                - 위젯 좌상단(0,0)에서 우하단(1,1)까지 정규화 비율
-                - x,y는 text pad의 좌상단, w,h는 너비/높이
-                - anchorObject는 이 text pad가 붙은 오브젝트 이름 (영어 짧게, 예: "sheep torso")
+                imagePrompt 구성 규칙:
+                - 1개의 dominant 오브젝트(+최대 2개 supporting). 전체 면적 60~80%.
+                - $itemCount개의 completely blank text pad 위치와 모양을 묘사.
+                - 전체 배경 풍경(하늘·땅·지평선) 금지. 멀리서 본 풍경 금지.
+                - no text, no numbers, no words, no category names anywhere in the image.
 
-                좋은 예시 (모티프=양떼목장, 정보=온도·비·걸음수·배터리):
-                imagePrompt: "A large fluffy sheep sticker as a lock screen widget skin, transparent background,
-                 $aspectLabel. Large lock screen widget skin, not a full scenic illustration,
-                 few large elements only, subject occupies 70 percent of the widget area.
-                 Do not draw many small objects. Do not draw a distant landscape.
-                 One dominant sheep body and 2 supporting prop objects.
-                 Four large text pads, each large enough for readable text:
-                 (1) sheep body torso at (8%,26%) — a large smooth cream oval text pad for TEMPERATURE.
-                 (2) a soft cloud sign above the sheep at (52%,8%) — a rounded white label pad for RAIN.
-                 (3) a wooden haystack sign at (8%,64%) — a wide flat sign panel for STEP count.
-                 (4) a lantern glow area at (60%,62%) — a soft oval glow pad for BATTERY.
-                 No background landscape. No tiny scattered details. No text, no numbers, no fake letters."
+                slots 작성 규칙:
+                - [슬롯 데이터]의 각 항목마다 슬롯 하나씩. label/value는 정확히 그대로 사용.
+                - x,y는 text pad 좌상단 비율(0~1), w,h는 너비/높이 (w≥0.30, h≥0.16 권장).
+                - anchorObject는 이 text pad가 붙은 오브젝트 이름 (영어 짧게).
+
+                ✅ 올바른 imagePrompt 예시 (모티프=양떼목장, pad 4개):
+                "A large fluffy sheep sticker as a lock screen widget skin, transparent background,
+                 $aspectLabel. Not a full scenic illustration. Few large elements only.
+                 One dominant fluffy sheep body filling 70 percent of the widget.
+                 Four completely blank empty text pads spread across the widget:
+                 (1) a large smooth cream oval on the sheep torso area — completely blank and empty.
+                 (2) a soft white rounded cloud panel above — completely blank.
+                 (3) a wide flat wooden sign at the lower left — completely blank.
+                 (4) a soft oval panel at the lower right — completely blank.
+                 No background landscape. No tiny scattered details.
+                 No text, no numbers, no words, no category names anywhere on the image."
 
                 반드시 JSON으로만 응답하세요. 다른 설명 없이 JSON만.
 
                 응답 스키마:
                 {
-                  "imagePrompt": "...",
+                  "imagePrompt": "<카테고리명 없는 순수 시각적 묘사만>",
                   "slots": [
                     {"label": "온도", "value": "23°C", "anchorObject": "sheep torso", "x": 0.08, "y": 0.26, "w": 0.38, "h": 0.18, "fontScale": 1.1}
                   ]
@@ -320,22 +325,22 @@ object GeminiClient {
     ): SketchScene {
         val pairs = infoItems.map { it.label to it.value }
         val baseSlots = designSlotLayout(pairs, aspectRatio)
-        val pads = listOf(
-            "large smooth rounded body text pad",
-            "soft glowing label panel",
-            "calm flat sign text pad",
-            "clean simple oval text pad",
+        // anchorObject는 시각적 설명만 — label명 없음
+        val padAnchors = listOf(
+            "large smooth cream oval",
+            "soft rounded white panel",
+            "wide flat wooden sign",
+            "soft oval glow area",
         )
         val slots = baseSlots.mapIndexed { i, s ->
             val source = infoItems.getOrNull(i)?.source ?: InfoSource.SAMPLE
-            s.copy(anchorObject = pads[i % pads.size], source = source)
+            s.copy(anchorObject = padAnchors[i % padAnchors.size], source = source)
         }
+        // imagePrompt: 위치 설명에 label/카테고리명 일절 없음
         val perPad = slots.mapIndexed { i, s ->
             val cx = ((s.xRatio + s.widthRatio / 2f) * 100).toInt()
             val cy = ((s.yRatio + s.heightRatio / 2f) * 100).toInt()
-            val pad = pads[i % pads.size]
-            val label = s.label.ifBlank { "an info value" }
-            "a $pad at about ($cx%,$cy%) reserved for \"$label\" text"
+            "a ${padAnchors[i % padAnchors.size]} centered at about ($cx%,$cy%) — completely blank and empty"
         }.joinToString(". ")
         val imagePrompt = buildString {
             append("A large clean lock screen widget skin based on \"")
@@ -344,9 +349,9 @@ object GeminiClient {
             append("Large lock screen widget skin, not a full scenic illustration, ")
             append("few large elements only, subject occupies 60 to 80 percent of the widget area. ")
             append("Do not draw many small objects. Do not draw a distant landscape. ")
-            append("Each object has large smooth text pads, each large enough for readable text: ")
+            append("${slots.size} completely blank empty text pads: ")
             if (perPad.isNotBlank()) append("$perPad. ")
-            append("No background landscape. No tiny scattered details. No text, no numbers, no fake letters.")
+            append("All text pads completely blank — no text, no numbers, no words, no category names anywhere.")
         }
         return SketchScene(imagePrompt, slots)
     }
@@ -380,16 +385,16 @@ object GeminiClient {
     }
 
     private const val IMAGE_SAFETY_SUFFIX =
-        " IMPORTANT: This is a large lock screen widget skin asset — NOT a full scenic illustration. " +
-            "Do not draw many small objects. Do not draw a distant landscape or background scene. " +
-            "Use one dominant central object and at most 2 large supporting objects. " +
+        " CRITICAL: All text pads in this image MUST BE COMPLETELY BLANK. " +
+            "Do NOT render any of these words or anything like them: " +
+            "WEATHER, TEMPERATURE, TEMP, RAIN, STEPS, STEP, BATTERY, UV, DATE, TIME, " +
+            "온도, 비, 걸음수, 배터리, 날씨, 날짜, 시간, or any information category name. " +
+            "Text pads are purely empty visual surfaces — the app overlays real text on them separately. " +
+            "NOT a full scenic illustration. One dominant central object and at most 2 supporting objects. " +
             "Subject occupies 60 to 80 percent of the widget area. " +
-            "Each object MUST have large smooth text pads — white, cream, glass-like, or soft label areas " +
-            "clearly visible and large enough for readable text overlay (minimum 30 percent width each). " +
-            "Prefer big soft shapes: stickers, signs, clouds, labels, ribbons, or panels as text pads. " +
-            "Fully transparent background (PNG alpha). A soft card base on the main object is allowed. " +
-            "No rectangular UI frame or border around the whole image. " +
-            "Do NOT render any letters, numbers, symbols, fake labels, or watermarks anywhere. " +
+            "Each blank text pad minimum 30 percent width. " +
+            "Fully transparent background (PNG alpha). Soft card base on main object is allowed. " +
+            "Do NOT render any letters, numbers, symbols, or words anywhere on the image. " +
             "High quality, polished lock screen widget skin asset."
 
     private fun callImageGenWithRetry(request: Request): ByteArray {
