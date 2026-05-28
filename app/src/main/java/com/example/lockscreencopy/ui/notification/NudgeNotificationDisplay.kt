@@ -1,17 +1,16 @@
 package com.example.lockscreencopy.ui.notification
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,11 +24,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -51,7 +48,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.lockscreencopy.model.NotificationItem
-import com.example.lockscreencopy.model.NudgeDisplayMode
 
 private val nudgePurple = Color(0xFF9B78FF)
 private val nudgeCyan = Color(0xFF4FC3F7)
@@ -59,29 +55,11 @@ private val nudgeGradient = Brush.linearGradient(listOf(nudgePurple, nudgeCyan))
 private val cardShape = RoundedCornerShape(18.dp)
 private val chipShape = RoundedCornerShape(50)
 
-// ───────────────────────────────────────
-//  진입점: 모드별 분기
-// ───────────────────────────────────────
-
 @Composable
 fun NudgeNotificationDisplay(
     notifications: List<NotificationItem>,
-    mode: NudgeDisplayMode,
     modifier: Modifier = Modifier,
 ) {
-    when (mode) {
-        NudgeDisplayMode.CARD -> CardModeList(notifications, modifier)
-        NudgeDisplayMode.ICON -> IconModeRow(notifications, modifier)
-        NudgeDisplayMode.DOT  -> DotModeIndicator(notifications, modifier)
-    }
-}
-
-// ───────────────────────────────────────
-//  CARD 모드
-// ───────────────────────────────────────
-
-@Composable
-private fun CardModeList(notifications: List<NotificationItem>, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -225,150 +203,6 @@ private fun NormalCard(item: NotificationItem, modifier: Modifier = Modifier) {
             Spacer(Modifier.height(4.dp))
             Text(item.title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(item.body, color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        }
-    }
-}
-
-// ───────────────────────────────────────
-//  ICON 모드
-// ───────────────────────────────────────
-
-@Composable
-private fun IconModeRow(notifications: List<NotificationItem>, modifier: Modifier = Modifier) {
-    if (notifications.isEmpty()) return
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        notifications.take(6).forEach { item ->
-            NotificationIconItem(item)
-        }
-    }
-}
-
-@Composable
-private fun NotificationIconItem(item: NotificationItem) {
-    val infiniteTransition = rememberInfiniteTransition(label = "icon_pulse")
-    val borderAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.6f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "border_alpha",
-    )
-
-    val iconShape = RoundedCornerShape(12.dp)
-    val borderModifier = if (item.hasNudge) {
-        Modifier.border(
-            width = 2.dp,
-            brush = Brush.linearGradient(
-                listOf(nudgePurple.copy(alpha = borderAlpha), nudgeCyan.copy(alpha = borderAlpha)),
-            ),
-            shape = iconShape,
-        )
-    } else {
-        Modifier
-    }
-
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .then(borderModifier)
-                .clip(iconShape)
-                .background(Color(0x882A2A2C))
-                .padding(if (item.hasNudge) 3.dp else 0.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Notifications,
-                contentDescription = item.appName,
-                tint = if (item.hasNudge) nudgePurple else Color.White.copy(alpha = 0.7f),
-                modifier = Modifier.size(22.dp),
-            )
-        }
-        Spacer(Modifier.height(3.dp))
-        Text(
-            text = item.appName.take(4),
-            color = if (item.hasNudge) nudgePurple else Color.White.copy(alpha = 0.6f),
-            fontSize = 9.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-// ───────────────────────────────────────
-//  DOT 모드
-// ───────────────────────────────────────
-
-@Composable
-private fun DotModeIndicator(notifications: List<NotificationItem>, modifier: Modifier = Modifier) {
-    val hasNudge = notifications.any { it.hasNudge }
-
-    val infiniteTransition = rememberInfiniteTransition(label = "dot_glow")
-    val glowScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.5f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "glow_scale",
-    )
-    val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.6f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "glow_alpha",
-    )
-
-    Row(
-        modifier = modifier.padding(horizontal = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        notifications.forEach { item ->
-            if (item.hasNudge && hasNudge) {
-                // 넛지 알림 — 빨간 발광 점
-                Box(contentAlignment = Alignment.Center) {
-                    // 외부 글로우
-                    Box(
-                        modifier = Modifier
-                            .size(14.dp)
-                            .graphicsLayer {
-                                scaleX = glowScale
-                                scaleY = glowScale
-                                alpha = glowAlpha
-                            }
-                            .clip(CircleShape)
-                            .background(Color(0xFFFF3B30).copy(alpha = 0.5f)),
-                    )
-                    // 내부 점
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFFF3B30)),
-                    )
-                }
-            } else {
-                // 일반 알림 — 흰색 점
-                Box(
-                    modifier = Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.5f)),
-                )
-            }
         }
     }
 }

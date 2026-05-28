@@ -87,8 +87,6 @@ data class HostedAppWidget(
     val scaleY: Float = 1f,
 )
 
-enum class NudgeDisplayMode { CARD, ICON, DOT }
-
 data class NotificationItem(
     val id: String,
     val appName: String,

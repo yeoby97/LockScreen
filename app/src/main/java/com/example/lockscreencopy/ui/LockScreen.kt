@@ -78,7 +78,6 @@ import com.example.lockscreencopy.model.BottomShortcut
 import com.example.lockscreencopy.model.FavoriteAppsLayout
 import com.example.lockscreencopy.model.FloatingWidget
 import com.example.lockscreencopy.model.HostedAppWidget
-import com.example.lockscreencopy.model.NudgeDisplayMode
 import com.example.lockscreencopy.model.PlacedWidget
 import com.example.lockscreencopy.model.WidgetSize
 import com.example.lockscreencopy.data.GeminiClient
@@ -171,7 +170,6 @@ fun LockScreen(
     val dummyNotifications = remember { sampleNotifications() }
     var useDummyNotifications by remember { mutableStateOf(false) }
     val notifications = if (useDummyNotifications) dummyNotifications else realNotifications
-    var nudgeDisplayMode by remember { mutableStateOf(NudgeDisplayMode.CARD) }
 
     var hasNotificationPermission by remember { mutableStateOf(isNotificationListenerEnabled(context)) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -689,7 +687,6 @@ fun LockScreen(
                 } else {
                     NudgeNotificationDisplay(
                         notifications = notifications,
-                        mode = nudgeDisplayMode,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -1005,20 +1002,12 @@ fun LockScreen(
         }
 
         if (isFloating) {
-            NudgeDisplayModeButton(
-                currentMode = nudgeDisplayMode,
-                onModeChange = { nudgeDisplayMode = it },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 24.dp, bottom = screenHeight * 0.28f)
-                    .graphicsLayer { alpha = editAlpha },
-            )
             NotificationSourceButton(
                 useDummy = useDummyNotifications,
                 onToggle = { useDummyNotifications = !useDummyNotifications },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(end = 24.dp, bottom = screenHeight * 0.40f)
+                    .padding(end = 24.dp, bottom = screenHeight * 0.28f)
                     .graphicsLayer { alpha = editAlpha },
             )
         }
@@ -1203,53 +1192,6 @@ private fun EditModeTopBar(visible: Boolean, alpha: Float = 1f, onConfirm: () ->
     ) {
         Button(onClick = {}, enabled = visible) { Text("배경화면") }
         Button(onClick = onConfirm, enabled = visible) { Text("확인") }
-    }
-}
-
-@Composable
-private fun NudgeDisplayModeButton(
-    currentMode: NudgeDisplayMode,
-    onModeChange: (NudgeDisplayMode) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val nextMode = when (currentMode) {
-        NudgeDisplayMode.CARD -> NudgeDisplayMode.ICON
-        NudgeDisplayMode.ICON -> NudgeDisplayMode.DOT
-        NudgeDisplayMode.DOT  -> NudgeDisplayMode.CARD
-    }
-    val modeLabel = when (currentMode) {
-        NudgeDisplayMode.CARD -> "카드"
-        NudgeDisplayMode.ICON -> "아이콘"
-        NudgeDisplayMode.DOT  -> "점"
-    }
-    val nudgePurple = Color(0xFF9B78FF)
-
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        FloatingActionButton(
-            onClick = { onModeChange(nextMode) },
-            containerColor = nudgePurple,
-            contentColor = Color.White,
-            shape = CircleShape,
-            modifier = Modifier.size(48.dp),
-        ) {
-            Icon(Icons.Filled.AutoAwesome, contentDescription = "넛지 알림 표시 방식")
-        }
-        Spacer(Modifier.height(4.dp))
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color.Black.copy(alpha = 0.5f))
-                .padding(horizontal = 6.dp, vertical = 2.dp),
-        ) {
-            Text(
-                text = "넛지: $modeLabel",
-                color = Color.White,
-                fontSize = 10.sp,
-            )
-        }
     }
 }
 
