@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.lockscreencopy.model.AiSketchWidget
 import com.example.lockscreencopy.model.AiTextSlot
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 private val CornerShape = RoundedCornerShape(16.dp)
@@ -105,7 +106,7 @@ fun AiSketchWidgetItem(
             }
 
             // 슬롯 기반 텍스트 오버레이
-            SlotTextOverlay(slots = widget.textSlots)
+            SlotTextOverlay(slots = widget.textSlots, scaleX = widget.scaleX, scaleY = widget.scaleY)
         }
 
         // 편집 모드 테두리 — clip 바깥에서 그려야 완전히 보임
@@ -127,8 +128,10 @@ fun AiSketchWidgetItem(
  * 이미지 생성 프롬프트의 negative space 위치와 1:1 대응하도록 설계됨.
  */
 @Composable
-private fun SlotTextOverlay(slots: List<AiTextSlot>) {
+private fun SlotTextOverlay(slots: List<AiTextSlot>, scaleX: Float = 1f, scaleY: Float = 1f) {
     if (slots.isEmpty()) return
+    // 위젯 리사이즈 시 텍스트 크기를 자연스럽게 따라가되 너무 크거나 작아지지 않도록 clamp
+    val scaleFactor = min(scaleX, scaleY).coerceIn(0.65f, 1.8f)
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         slots.forEach { slot ->
             val x = maxWidth * slot.xRatio
@@ -148,8 +151,8 @@ private fun SlotTextOverlay(slots: List<AiTextSlot>) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    val valueFontSize = (baseSp * slot.fontScale).sp
-                    val labelFontSize = (baseSp * 0.68f * slot.fontScale).sp
+                    val valueFontSize = (baseSp * slot.fontScale * scaleFactor).sp
+                    val labelFontSize = (baseSp * 0.68f * slot.fontScale * scaleFactor).sp
                     val valueFontWeight = when (slot.role) {
                         "main" -> FontWeight.Bold
                         else -> FontWeight.SemiBold

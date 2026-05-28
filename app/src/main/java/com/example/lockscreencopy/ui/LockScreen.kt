@@ -88,7 +88,9 @@ import com.example.lockscreencopy.ui.llm.ShortcutRecommendationBadge
 import com.example.lockscreencopy.ui.llm.StripAppEntry
 import com.example.lockscreencopy.ui.llm.placeGhostRects
 import com.example.lockscreencopy.ui.llm.realWidgetGhostKey
+import com.example.lockscreencopy.ui.sketch.PendingSketch
 import com.example.lockscreencopy.ui.sketch.SketchModeOverlay
+import com.example.lockscreencopy.ui.sketch.SlotAdjustOverlay
 import com.example.lockscreencopy.ui.widget.AiSketchWidgetItem
 import com.example.lockscreencopy.ui.widget.toBitmapSafe
 import com.example.lockscreencopy.ui.picker.AiActionChoice
@@ -191,6 +193,7 @@ fun LockScreen(
     var sketchError by remember { mutableStateOf<String?>(null) }
     var aiSketchWidgets by remember { mutableStateOf<List<AiSketchWidget>>(emptyList()) }
     var aiSketchCounter by remember { mutableStateOf(0) }
+    var pendingSketchAdjust by remember { mutableStateOf<PendingSketch?>(null) }
     val sketchScope = rememberCoroutineScope()
 
     var addCounter by remember { mutableStateOf(0) }
@@ -964,6 +967,29 @@ fun LockScreen(
             )
         }
 
+        pendingSketchAdjust?.let { pending ->
+            SlotAdjustOverlay(
+                pending = pending,
+                onConfirm = { adjustedSlots ->
+                    aiSketchCounter++
+                    aiSketchWidgets = aiSketchWidgets + AiSketchWidget(
+                        uid = "ai_sketch_$aiSketchCounter",
+                        imageBitmap = pending.bitmap,
+                        textSlots = adjustedSlots,
+                        offset = Offset(pending.widgetRect.left, pending.widgetRect.top),
+                        widthDp = pending.widthDp,
+                        heightDp = pending.heightDp,
+                    )
+                    if (!isFloating) {
+                        clockOffset = savedClockOffset
+                        isFloating = true
+                    }
+                    pendingSketchAdjust = null
+                },
+                onCancel = { pendingSketchAdjust = null },
+            )
+        }
+
         if (sketchMode) {
             SketchModeOverlay(
                 loading = sketchLoading,
@@ -1002,22 +1028,16 @@ fun LockScreen(
                                 BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
                             }
 
-                            // 4. 슬롯 + 이미지 + 위치/크기로 위젯 생성
+                            // 4. 생성 결과를 슬롯 보정 대기 상태로 저장 — 바로 확정하지 않음
                             val widthDp = with(density) { (rect.right - rect.left).toDp().value }
                             val heightDp = with(density) { (rect.bottom - rect.top).toDp().value }
-                            aiSketchCounter++
-                            aiSketchWidgets = aiSketchWidgets + AiSketchWidget(
-                                uid = "ai_sketch_$aiSketchCounter",
-                                imageBitmap = bitmap,
-                                textSlots = slots,
-                                offset = Offset(rect.left, rect.top),
+                            pendingSketchAdjust = PendingSketch(
+                                bitmap = bitmap,
+                                initialSlots = slots,
+                                widgetRect = rect,
                                 widthDp = widthDp,
                                 heightDp = heightDp,
                             )
-                            if (!isFloating) {
-                                clockOffset = savedClockOffset
-                                isFloating = true
-                            }
                             sketchLoading = false
                             sketchMode = false
                         } catch (t: Throwable) {
