@@ -212,7 +212,7 @@ object GeminiClient {
             throw LlmException("Gemini API 키가 설정되지 않았습니다. GeminiClient.API_KEY를 채워주세요.")
         }
         val aspectLabel = aspectRatioLabel(aspectRatio)
-        val prompt = buildImageGenPrompt(imageShape, slots, aspectLabel)
+        val prompt = buildImageGenPrompt(imageShape, aspectLabel)
         val bodyJson = JSONObject().apply {
             put("contents", JSONArray().put(
                 JSONObject().put("parts", JSONArray().put(
@@ -231,37 +231,18 @@ object GeminiClient {
         callImageGenWithRetry(request)
     }
 
-    private fun buildImageGenPrompt(
-        imageShape: String,
-        slots: List<AiTextSlot>,
-        aspectRatio: String,
-    ): String {
-        val spaceHints = slots.joinToString(". ") { s ->
-            val x1 = (s.xRatio * 100).toInt()
-            val y1 = (s.yRatio * 100).toInt()
-            val x2 = ((s.xRatio + s.widthRatio) * 100).toInt()
-            val y2 = ((s.yRatio + s.heightRatio) * 100).toInt()
-            val roleDesc = when (s.role) {
-                "title" -> "small label zone"
-                "main" -> "primary display zone"
-                "sub" -> "secondary info zone"
-                else -> "detail zone"
-            }
-            "Keep a visually calm $roleDesc from ($x1%,$y1%) to ($x2%,$y2%)"
-        }
-        return buildString {
+    private fun buildImageGenPrompt(imageShape: String, aspectRatio: String): String =
+        buildString {
             append(imageShape.trim())
-            append(" style widget skin for a smartphone lock screen. ")
+            append(" style decorative background for a smartphone lock screen widget. ")
             append("Aspect ratio $aspectRatio. ")
-            if (spaceHints.isNotBlank()) append("$spaceHints. ")
-            append("Do NOT draw visible boxes, frames, input fields, placeholder rectangles, or UI chrome. ")
-            append("Do NOT render any letters, numbers, symbols, fake text, labels, or watermarks anywhere. ")
-            append("Keep text zones visually calm with low visual complexity — ")
-            append("decoration and detail only in non-text areas. ")
-            append("Transparent or frosted/glassmorphism background. ")
-            append("High quality, elegant, minimalist lock screen widget illustration.")
+            append("Do NOT draw any text panels, bars, cards, boxes, frames, placeholder rectangles, ")
+            append("UI chrome, or any panel elements — text overlays are added separately by the app. ")
+            append("Do NOT render any letters, numbers, symbols, fake text, labels, or watermarks. ")
+            append("Pure decorative illustration only. ")
+            append("Transparent or frosted/glassmorphism background outside the widget shape. ")
+            append("High quality, elegant, minimalist artwork.")
         }
-    }
 
     private fun callImageGenWithRetry(request: Request): ByteArray {
         var lastErr: Throwable? = null

@@ -9,10 +9,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,11 +26,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -41,12 +39,8 @@ import com.example.lockscreencopy.model.AiSketchWidget
 import com.example.lockscreencopy.model.AiTextSlot
 import kotlin.math.roundToInt
 
-private val CornerShape = RoundedCornerShape(16.dp)
-private val textShadow = Shadow(
-    color = Color.Black.copy(alpha = 0.55f),
-    offset = Offset(0f, 1f),
-    blurRadius = 4f,
-)
+private val WidgetCorner = RoundedCornerShape(16.dp)
+private val PanelCorner = RoundedCornerShape(10.dp)
 
 @Composable
 fun AiSketchWidgetItem(
@@ -80,7 +74,7 @@ fun AiSketchWidgetItem(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(CornerShape),
+                .clip(WidgetCorner),
         ) {
             if (widget.imageBitmap != null) {
                 Image(
@@ -121,7 +115,7 @@ fun AiSketchWidgetItem(
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .border(1.dp, Color.White.copy(alpha = 0.65f), CornerShape),
+                    .border(1.dp, Color.White.copy(alpha = 0.65f), WidgetCorner),
             )
         }
 
@@ -131,8 +125,10 @@ fun AiSketchWidgetItem(
 }
 
 /**
- * 슬롯 좌표(0.0~1.0 비율)를 `BoxWithConstraints`로 실제 dp 로 변환해 텍스트를 배치.
- * 이미지 생성 프롬프트의 negative space 위치와 1:1 대응하도록 설계됨.
+ * 각 슬롯의 좌표(0.0~1.0 비율)에 Compose가 직접 반투명 패널을 그리고,
+ * 그 안에 value + label 텍스트를 배치한다.
+ * 이미지 모델 출력과 무관하게 패널과 텍스트가 항상 같은 위치에 있다.
+ * 위젯 resize 시 BoxWithConstraints 가 재측정되므로 패널/텍스트 크기도 자동으로 변한다.
  */
 @Composable
 private fun SlotTextOverlay(slots: List<AiTextSlot>) {
@@ -149,41 +145,35 @@ private fun SlotTextOverlay(slots: List<AiTextSlot>) {
                 modifier = Modifier
                     .offset(x = x, y = y)
                     .width(w)
-                    .height(h),
+                    .height(h)
+                    .clip(PanelCorner)
+                    .background(Color.Black.copy(alpha = 0.38f))
+                    .border(0.5.dp, Color.White.copy(alpha = 0.20f), PanelCorner),
                 contentAlignment = Alignment.Center,
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
                 ) {
-                    val valueFontSize = (baseSp * slot.fontScale).sp
-                    val labelFontSize = (baseSp * 0.68f * slot.fontScale).sp
-                    val valueFontWeight = when (slot.role) {
-                        "main" -> FontWeight.Bold
-                        else -> FontWeight.SemiBold
-                    }
-
                     Text(
                         text = slot.value,
                         color = Color.White,
-                        fontSize = valueFontSize,
-                        fontWeight = valueFontWeight,
+                        fontSize = (baseSp * slot.fontScale).sp,
+                        fontWeight = if (slot.role == "main") FontWeight.Bold else FontWeight.SemiBold,
                         textAlign = TextAlign.Center,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        style = TextStyle(shadow = textShadow),
                     )
                     if (slot.label.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(1.dp))
                         Text(
                             text = slot.label,
-                            color = Color.White.copy(alpha = 0.68f),
-                            fontSize = labelFontSize,
+                            color = Color.White.copy(alpha = 0.72f),
+                            fontSize = (baseSp * 0.68f * slot.fontScale).sp,
                             fontWeight = FontWeight.Normal,
                             textAlign = TextAlign.Center,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            style = TextStyle(shadow = textShadow),
                         )
                     }
                 }
