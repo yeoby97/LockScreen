@@ -225,46 +225,46 @@ object GeminiClient {
         runCatching {
             val itemsText = infoItems.joinToString(", ") { "${it.first}=${it.second}" }
             val prompt = """
-                사용자가 잠금화면 위젯에 두고 싶은 그림 모티프: "${imageShape.trim()}"
+                사용자가 잠금화면 위젯 스킨으로 원하는 모티프: "${imageShape.trim()}"
                 위젯에 표시할 정보 항목(레이블=값): $itemsText
                 위젯 가로:세로 비율: $aspectLabel
 
-                이 모티프를 활용해, 각 정보가 그림의 "자연스러운 요소"에 녹아드는 위젯을 설계하세요.
-                예시:
-                - 나무 모티프면 각 정보를 큼직한 나뭇잎 위에 얹습니다.
-                - 공룡 모티프면 정보를 공룡이 내뿜는 불꽃 위에 얹습니다.
-                - 습도처럼 축축한 정보는 공룡 옆 작은 땀방울 위에 얹어도 좋습니다.
-                - 우주 모티프면 각 정보를 서로 다른 행성 위에 얹습니다.
+                이 모티프를 바탕으로 "잠금화면 위젯 스킨 에셋"을 설계하세요.
+                전체 풍경·배경 장면이 아니라, 실제 위젯으로 쓸 수 있는 큼직한 스티커형 오브젝트입니다.
 
-                규칙:
-                - 정보 항목마다 그것을 담을 자연스러운 요소(잎/행성/불꽃/땀방울/물방울 등)를 하나씩 정합니다.
-                - 요소들을 격자처럼 규칙적으로 늘어놓지 말고, 그림 구도상 자연스럽게 흩어 배치하세요.
-                - 좌표는 위젯 좌상단 (0,0)에서 우하단 (1,1)까지의 정규화 비율입니다.
-                  x,y 는 텍스트가 들어갈 영역의 좌상단, w,h 는 그 영역의 너비/높이 비율.
-                - 배경은 반드시 투명(transparent). 사각형 카드/프레임/박스/UI 요소 없이 모티프 주제만 그립니다.
-                - 이미지에는 글자/숫자/기호를 절대 그리지 마세요. (텍스트는 앱이 따로 얹습니다.)
+                설계 규칙:
+                - 오브젝트는 1~3개의 크고 선명한 요소로만 구성합니다. 작은 요소를 여러 개 흩뿌리지 마세요.
+                - 주요 오브젝트가 위젯 면적의 60~80%를 차지해야 합니다.
+                - 각 정보를 올려놓을 수 있는 넓고 단순한 면(smooth surface)이 오브젝트 위에 있어야 합니다.
+                - 스티커형(sticker-like) 또는 소프트 카드형(soft card base) 구성이어도 됩니다.
+                - 전체 장면(풍경·하늘·땅·배경)은 피하세요.
+                - 좌표는 위젯 좌상단(0,0)에서 우하단(1,1)까지의 정규화 비율.
+                  x,y는 텍스트 영역 좌상단, w,h는 너비/높이 비율.
+                - 이미지에 글자/숫자/기호는 절대 그리지 마세요.
+                - 배경은 투명(transparent) 기본. 단, 오브젝트 자체의 카드 베이스/글래스 패널은 허용.
 
-                imagePrompt(영어)는 키워드 나열이 아니라, 상상한 장면을 글로 묘사하는 "상세 설명"이어야 합니다.
-                반드시 아래 내용을 모두 담으세요.
-                1) 모티프를 바탕으로 상상한 전체 장면 묘사. (예: "동물원"이면 어떤 동물원 풍경인지 구체적으로)
-                2) 정보 항목마다 한 문장씩: 그 정보를 담을 요소가 무엇이고, 어떻게 생겼으며,
-                   화면의 몇 % 위치에 있고, 그 위에 "어떤 정보(예: 날씨/온도/습도)"를 담기 위해
-                   매끈하게 비워둘지를 풀어서 설명하세요. (단, 실제 글자·숫자는 절대 그리지 말 것)
-                3) 위젯 가로:세로 비율($aspectLabel)에 맞는 구도로 그리도록 명시하세요.
-                4) 각 요소의 위치(%)는 아래 slots 의 x,y 와 반드시 일치시키세요.
+                imagePrompt(영어)는 상상한 위젯 스킨을 구체적으로 묘사해야 합니다:
+                1) 모티프에서 뽑아낸 1~3개의 큰 오브젝트가 무엇이고 어떻게 생겼는지
+                2) 각 정보를 담을 smooth surface의 위치와 모양 (slots x,y와 일치)
+                3) 위젯 비율($aspectLabel)에 맞는 구도
+                4) "large lock screen widget skin", "not a full scene", "few large elements only",
+                   "subject occupies 60 to 80 percent", "no tiny scattered details" 문구 포함
 
-                좋은 imagePrompt 예시 (모티프=공룡, 정보=날씨·온도·습도):
-                "A whimsical fire-breathing dinosaur facing left, fully transparent background, 9:16 composition.
-                 The dinosaur breathes flame puffs. The large flame at about (62%,30%) is a smooth, rounded,
-                 calm clear area reserved to present the WEATHER condition. A medium flame at about (74%,52%)
-                 is a calm area reserved for the TEMPERATURE. A small sweat droplet on the dinosaur's brow at
-                 about (40%,22%) is a clear rounded area reserved for the HUMIDITY. No letters or numbers drawn."
+                좋은 예시 (모티프=양떼목장, 정보=온도·비·자외선·걸음수):
+                "A large cute fluffy sheep as a sticker-like lock screen widget skin, transparent background,
+                 $aspectLabel. Large lock screen widget skin, not a full scene, few large elements only,
+                 subject occupies 60 to 80 percent of the widget area. The sheep body fills most of the widget.
+                 The sheep's fluffy torso at about (20%,30%) is a large smooth rounded surface reserved for
+                 TEMPERATURE text. A soft rain cloud above at (55%,12%) is a rounded calm shape reserved for
+                 RAIN. A simple sun motif at (68%,58%) is a smooth glowing circle reserved for UV index.
+                 The sheep's feet area at (28%,72%) is a clean grassy patch reserved for STEP count.
+                 No background landscape. No tiny scattered details. No text, no numbers."
 
                 반드시 JSON으로만 응답하세요. 다른 설명 없이 JSON만.
 
                 응답 스키마:
                 {
-                  "imagePrompt": "<위 1~4를 모두 담은 상세 영어 프롬프트>",
+                  "imagePrompt": "<위 내용을 담은 상세 영어 프롬프트>",
                   "slots": [
                     {"label": "온도", "value": "23°C", "x": 0.22, "y": 0.30, "w": 0.20, "h": 0.14, "fontScale": 1.1}
                   ]
@@ -307,22 +307,28 @@ object GeminiClient {
         aspectLabel: String,
     ): SketchScene {
         val slots = designSlotLayout(infoItems, aspectRatio)
-        val carriers = listOf("a large leaf", "a glowing planet", "a soft flame", "a round droplet")
+        val surfaces = listOf(
+            "a large smooth rounded body surface",
+            "a soft glowing panel area",
+            "a calm flat rounded patch",
+            "a clean simple base area",
+        )
         val perItem = slots.mapIndexed { i, s ->
             val cx = ((s.xRatio + s.widthRatio / 2f) * 100).toInt()
             val cy = ((s.yRatio + s.heightRatio / 2f) * 100).toInt()
-            val carrier = carriers[i % carriers.size]
+            val surface = surfaces[i % surfaces.size]
             val label = s.label.ifBlank { "an info value" }
-            "$carrier at about ($cx%,$cy%) is a smooth, calm clear area reserved to present the \"$label\" information"
+            "$surface at about ($cx%,$cy%) reserved for \"$label\" text overlay"
         }.joinToString(". ")
         val imagePrompt = buildString {
-            append("A playful, elegant illustration imagined from \"")
+            append("A large clean lock screen widget skin based on \"")
             append(imageShape.trim().ifBlank { "a single charming subject" })
-            append("\" on a fully transparent background, $aspectLabel composition. ")
-            append("Weave each piece of information naturally into the scene: ")
+            append("\", fully transparent background, $aspectLabel composition. ")
+            append("Large lock screen widget skin, not a full scene, few large elements only, ")
+            append("subject occupies 60 to 80 percent of the widget area, clean sticker-like composition, ")
+            append("no tiny scattered details. Each object has smooth readable surfaces: ")
             if (perItem.isNotBlank()) append("$perItem. ")
-            append("Spread the elements naturally across the composition, not in a rigid grid. ")
-            append("No letters or numbers drawn anywhere.")
+            append("No background landscape. No text, no numbers.")
         }
         return SketchScene(imagePrompt, slots)
     }
@@ -356,12 +362,14 @@ object GeminiClient {
     }
 
     private const val IMAGE_SAFETY_SUFFIX =
-        " Fully transparent background (PNG alpha) — absolutely no background scene, sky, floor, " +
-            "no rectangular card, no frame, no border, no UI chrome. Draw ONLY the subject motif and its " +
-            "natural carrier elements floating on transparency, so it blends into any wallpaper. " +
-            "Do NOT render any letters, numbers, symbols, fake text, labels, or watermarks anywhere. " +
-            "Keep each carrier element's center calm and uncluttered so text can be overlaid on it later. " +
-            "High quality, elegant, charming illustration."
+        " IMPORTANT: This is a large lock screen widget skin asset — NOT a full scene, NOT a landscape " +
+            "illustration. Use only 1 to 3 large dominant objects filling 60 to 80 percent of the widget area. " +
+            "Clean sticker-like composition. No tiny scattered details. No full background, no sky, no floor. " +
+            "Each object must have large smooth readable surfaces so text can be overlaid on them later. " +
+            "Fully transparent background (PNG alpha). A soft card base or glass panel base on the object is " +
+            "allowed if it makes the widget look polished. No rectangular UI frame or border around the whole image. " +
+            "Do NOT render any letters, numbers, symbols, fake labels, or watermarks anywhere. " +
+            "High quality, polished widget skin asset."
 
     private fun callImageGenWithRetry(request: Request): ByteArray {
         var lastErr: Throwable? = null
