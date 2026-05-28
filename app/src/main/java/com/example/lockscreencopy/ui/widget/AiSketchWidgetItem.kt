@@ -23,7 +23,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
@@ -76,24 +75,17 @@ fun AiSketchWidgetItem(
                 }
             },
     ) {
-        // Inner Box — 이미지 + 슬롯 텍스트. 여기서만 clip 적용.
+        // Inner Box — 이미지 + 슬롯 텍스트.
+        // 투명 PNG가 배경화면에 그대로 녹아들도록 카드 배경/딤(dim)을 두지 않는다.
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(CornerShape),
+            modifier = Modifier.fillMaxSize(),
         ) {
             if (widget.imageBitmap != null) {
                 Image(
                     bitmap = widget.imageBitmap.asImageBitmap(),
                     contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                    contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize(),
-                )
-                // 텍스트 가독성 보조 dim
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.18f)),
                 )
             } else {
                 // 이미지 없을 때 기본 배경

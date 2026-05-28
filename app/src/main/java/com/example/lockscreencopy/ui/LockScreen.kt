@@ -72,7 +72,6 @@ import com.example.lockscreencopy.model.HostedAppWidget
 import com.example.lockscreencopy.model.PlacedWidget
 import com.example.lockscreencopy.model.WidgetSize
 import com.example.lockscreencopy.data.GeminiClient
-import com.example.lockscreencopy.data.designSlotLayout
 import com.example.lockscreencopy.data.handleSystemAction
 import com.example.lockscreencopy.data.hasUsageStatsPermission
 import com.example.lockscreencopy.data.launchAppShortcut
@@ -989,15 +988,16 @@ fun LockScreen(
                                 return@launch
                             }
 
-                            // 2. 항목 수 + 비율 기반 슬롯 좌표 설계
-                            val slots = designSlotLayout(parsedItems, aspectRatio)
-
-                            // 3. 슬롯 좌표를 negative space 힌트로 Imagen 프롬프트 구성 후 이미지 생성
-                            val imageBytes = GeminiClient.generateWidgetImage(
+                            // 2. 정보가 모티프의 자연 요소(잎/행성/불꽃/땀방울)에 녹아들도록 장면 설계
+                            val scene = GeminiClient.designSketchScene(
+                                infoItems = parsedItems,
                                 imageShape = imageShape,
-                                slots = slots,
                                 aspectRatio = aspectRatio,
                             )
+                            val slots = scene.slots
+
+                            // 3. 투명 배경 + 글자 없는 이미지 생성 (텍스트는 앱이 슬롯 위에 얹음)
+                            val imageBytes = GeminiClient.generateWidgetImage(scene.imagePrompt)
                             val bitmap = withContext(Dispatchers.Default) {
                                 BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
                             }

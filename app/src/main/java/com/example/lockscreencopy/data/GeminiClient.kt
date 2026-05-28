@@ -23,6 +23,16 @@ data class LlmRecommendation(
     val right: String?,
 )
 
+/**
+ * AI 스케치 장면 설계 결과.
+ * 정보가 그림의 자연스러운 요소(나뭇잎/행성/불꽃/땀방울 등)에 "녹아들도록"
+ * 한 LLM이 함께 만들어낸 이미지 생성 프롬프트 + 각 정보의 위치 슬롯.
+ */
+data class SketchScene(
+    val imagePrompt: String,
+    val slots: List<AiTextSlot>,
+)
+
 object GeminiClient {
     // TODO: 실제 키로 교체하세요. (현재는 임시 하드코딩 상수)
     private const val API_KEY: String = "YOUR_GEMINI_API_KEY"
@@ -199,20 +209,115 @@ object GeminiClient {
     }
 
     /**
-     * Gemini 이미지 생성 모델로 위젯 배경 이미지를 생성한다.
-     * generateContent 엔드포인트 + responseModalities IMAGE 사용.
-     * aspectRatio는 파라미터가 아닌 프롬프트 텍스트에 명시.
+     * 정보 항목 + 그림 모티프를 받아, 각 정보가 모티프의 자연스러운 요소에
+     * 녹아드는 장면을 설계한다. (영어 이미지 프롬프트 + 정보별 위치 슬롯)
+     * API 키가 없거나 호출이 실패하면 로컬 규칙 기반 fallback 장면을 만든다.
      */
-    suspend fun generateWidgetImage(
+    suspend fun designSketchScene(
+        infoItems: List<Pair<String, String>>,
         imageShape: String,
-        slots: List<AiTextSlot>,
         aspectRatio: Float,
-    ): ByteArray = withContext(Dispatchers.IO) {
+    ): SketchScene = withContext(Dispatchers.IO) {
+        val aspectLabel = aspectRatioLabel(aspectRatio)
+        if (API_KEY.isBlank() || API_KEY == "YOUR_GEMINI_API_KEY") {
+            return@withContext fallbackScene(infoItems, imageShape, aspectRatio, aspectLabel)
+        }
+        runCatching {
+            val itemsText = infoItems.joinToString(", ") { "${it.first}=${it.second}" }
+            val prompt = """
+                사용자가 잠금화면 위젯에 두고 싶은 그림 모티프: "${imageShape.trim()}"
+                위젯에 표시할 정보 항목(레이블=값): $itemsText
+                위젯 가로:세로 비율: $aspectLabel
+
+                이 모티프를 활용해, 각 정보가 그림의 "자연스러운 요소"에 녹아드는 위젯을 설계하세요.
+                예시:
+                - 나무 모티프면 각 정보를 큼직한 나뭇잎 위에 얹습니다.
+                - 공룡 모티프면 정보를 공룡이 내뿜는 불꽃 위에 얹습니다.
+                - 습도처럼 축축한 정보는 공룡 옆 작은 땀방울 위에 얹어도 좋습니다.
+                - 우주 모티프면 각 정보를 서로 다른 행성 위에 얹습니다.
+
+                규칙:
+                - 정보 항목마다 그것을 담을 자연스러운 요소(잎/행성/불꽃/땀방울/물방울 등)를 하나씩 정합니다.
+                - 요소들을 격자처럼 규칙적으로 늘어놓지 말고, 그림 구도상 자연스럽게 흩어 배치하세요.
+                - 좌표는 위젯 좌상단 (0,0)에서 우하단 (1,1)까지의 정규화 비율입니다.
+                  x,y 는 텍스트가 들어갈 영역의 좌상단, w,h 는 그 영역의 너비/높이 비율.
+                - 배경은 반드시 투명(transparent). 사각형 카드/프레임/박스/UI 요소 없이 모티프 주제만 그립니다.
+                - 이미지에는 글자/숫자/기호를 절대 그리지 마세요. (텍스트는 앱이 따로 얹습니다.)
+
+                영어로 된 imagePrompt를 작성하되, 위에서 정한 요소의 종류와 대략적 위치(퍼센트)를 명시해
+                나중에 앱이 얹을 텍스트가 그 요소 위에 정확히 오도록 하세요.
+
+                반드시 JSON으로만 응답하세요. 다른 설명 없이 JSON만.
+
+                응답 스키마:
+                {
+                  "imagePrompt": "<영어 이미지 생성 프롬프트. 투명 배경, 글자 없음, 요소별 위치 명시>",
+                  "slots": [
+                    {"label": "온도", "value": "23°C", "x": 0.22, "y": 0.30, "w": 0.20, "h": 0.14, "fontScale": 1.1}
+                  ]
+                }
+            """.trimIndent()
+            val raw = callGemini(prompt)
+            parseSketchScene(raw).takeIf { it.slots.isNotEmpty() && it.imagePrompt.isNotBlank() }
+                ?: fallbackScene(infoItems, imageShape, aspectRatio, aspectLabel)
+        }.getOrElse { fallbackScene(infoItems, imageShape, aspectRatio, aspectLabel) }
+    }
+
+    private fun parseSketchScene(text: String): SketchScene {
+        val obj = runCatching { JSONObject(sanitizeJson(text)) }.getOrNull()
+            ?: return SketchScene("", emptyList())
+        val imagePrompt = obj.optString("imagePrompt", "").trim()
+        val arr = obj.optJSONArray("slots") ?: return SketchScene(imagePrompt, emptyList())
+        val slots = List(arr.length()) { i ->
+            val o = arr.optJSONObject(i) ?: return@List null
+            val label = o.optString("label", "").trim()
+            val value = o.optString("value", "").trim()
+            if (label.isBlank() && value.isBlank()) return@List null
+            val x = o.optDouble("x", 0.1).toFloat().coerceIn(0f, 0.95f)
+            val y = o.optDouble("y", 0.1).toFloat().coerceIn(0f, 0.95f)
+            val w = o.optDouble("w", 0.25).toFloat().coerceIn(0.05f, 1f).coerceAtMost(1f - x)
+            val h = o.optDouble("h", 0.15).toFloat().coerceIn(0.05f, 1f).coerceAtMost(1f - y)
+            val fs = o.optDouble("fontScale", 1.0).toFloat().coerceIn(0.5f, 2.5f)
+            AiTextSlot(label, value, "main", x, y, w, h, fs)
+        }.filterNotNull().take(4)
+        return SketchScene(imagePrompt, slots)
+    }
+
+    /**
+     * LLM 없이도 동작하는 fallback 장면.
+     * 위치는 규칙 기반 슬롯을 재사용하되, 프롬프트는 투명 배경 + 자연 요소 강조로 구성.
+     */
+    private fun fallbackScene(
+        infoItems: List<Pair<String, String>>,
+        imageShape: String,
+        aspectRatio: Float,
+        aspectLabel: String,
+    ): SketchScene {
+        val slots = designSlotLayout(infoItems, aspectRatio)
+        val n = infoItems.size.coerceAtLeast(1)
+        val imagePrompt = buildString {
+            append("A playful, elegant illustration of ")
+            append(imageShape.trim().ifBlank { "a single charming subject" })
+            append(" on a fully transparent background. ")
+            append("Weave the information into the artwork by including $n distinct natural carrier elements ")
+            append("(such as large leaves, glowing planets, flames, or droplets) ")
+            append("spread naturally across the composition — not in a rigid grid. ")
+            append("Each carrier element should have a calm, simple clear area where a short piece of text can sit later. ")
+            append("Aspect ratio $aspectLabel.")
+        }
+        return SketchScene(imagePrompt, slots)
+    }
+
+    /**
+     * Gemini 이미지 생성 모델로 위젯 이미지를 생성한다.
+     * 장면 설계 단계에서 만든 imagePrompt를 그대로 사용하되,
+     * 투명 배경 + 글자 없음을 강제하는 안전 접미사를 항상 덧붙인다.
+     */
+    suspend fun generateWidgetImage(imagePrompt: String): ByteArray = withContext(Dispatchers.IO) {
         if (API_KEY.isBlank() || API_KEY == "YOUR_GEMINI_API_KEY") {
             throw LlmException("Gemini API 키가 설정되지 않았습니다. GeminiClient.API_KEY를 채워주세요.")
         }
-        val aspectLabel = aspectRatioLabel(aspectRatio)
-        val prompt = buildImageGenPrompt(imageShape, slots, aspectLabel)
+        val prompt = imagePrompt.trim() + IMAGE_SAFETY_SUFFIX
         val bodyJson = JSONObject().apply {
             put("contents", JSONArray().put(
                 JSONObject().put("parts", JSONArray().put(
@@ -231,37 +336,13 @@ object GeminiClient {
         callImageGenWithRetry(request)
     }
 
-    private fun buildImageGenPrompt(
-        imageShape: String,
-        slots: List<AiTextSlot>,
-        aspectRatio: String,
-    ): String {
-        val spaceHints = slots.joinToString(". ") { s ->
-            val x1 = (s.xRatio * 100).toInt()
-            val y1 = (s.yRatio * 100).toInt()
-            val x2 = ((s.xRatio + s.widthRatio) * 100).toInt()
-            val y2 = ((s.yRatio + s.heightRatio) * 100).toInt()
-            val roleDesc = when (s.role) {
-                "title" -> "small label zone"
-                "main" -> "primary display zone"
-                "sub" -> "secondary info zone"
-                else -> "detail zone"
-            }
-            "Keep a visually calm $roleDesc from ($x1%,$y1%) to ($x2%,$y2%)"
-        }
-        return buildString {
-            append(imageShape.trim())
-            append(" style widget skin for a smartphone lock screen. ")
-            append("Aspect ratio $aspectRatio. ")
-            if (spaceHints.isNotBlank()) append("$spaceHints. ")
-            append("Do NOT draw visible boxes, frames, input fields, placeholder rectangles, or UI chrome. ")
-            append("Do NOT render any letters, numbers, symbols, fake text, labels, or watermarks anywhere. ")
-            append("Keep text zones visually calm with low visual complexity — ")
-            append("decoration and detail only in non-text areas. ")
-            append("Transparent or frosted/glassmorphism background. ")
-            append("High quality, elegant, minimalist lock screen widget illustration.")
-        }
-    }
+    private const val IMAGE_SAFETY_SUFFIX =
+        " Fully transparent background (PNG alpha) — absolutely no background scene, sky, floor, " +
+            "no rectangular card, no frame, no border, no UI chrome. Draw ONLY the subject motif and its " +
+            "natural carrier elements floating on transparency, so it blends into any wallpaper. " +
+            "Do NOT render any letters, numbers, symbols, fake text, labels, or watermarks anywhere. " +
+            "Keep each carrier element's center calm and uncluttered so text can be overlaid on it later. " +
+            "High quality, elegant, charming illustration."
 
     private fun callImageGenWithRetry(request: Request): ByteArray {
         var lastErr: Throwable? = null

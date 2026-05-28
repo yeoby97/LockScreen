@@ -233,11 +233,11 @@ fun SketchModeOverlay(
                             onValueChange = { imageShape = it },
                             modifier = Modifier.fillMaxWidth(),
                             label = {
-                                Text("원하는 이미지 형상", color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp)
+                                Text("원하는 그림 (정보가 녹아듦)", color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp)
                             },
                             placeholder = {
                                 Text(
-                                    "예: 미니멀 원형 유리 카드",
+                                    "예: 나무, 불 뿜는 공룡, 우주 행성들",
                                     color = Color.White.copy(alpha = 0.5f),
                                     fontSize = 11.sp,
                                 )
