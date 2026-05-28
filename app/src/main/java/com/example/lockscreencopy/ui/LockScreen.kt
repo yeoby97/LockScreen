@@ -587,7 +587,7 @@ fun LockScreen(
             Column(
                 modifier = Modifier.fillMaxSize().padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.Top,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     EditModeTopBar(
@@ -682,33 +682,34 @@ fun LockScreen(
                 if (!hasNotificationPermission) {
                     NotificationPermissionBanner(
                         onOpenSettings = { openNotificationListenerSettings(context) },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().weight(1f),
                     )
                 } else {
                     NudgeNotificationDisplay(
                         notifications = notifications,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().weight(1f),
                     )
                 }
+            }
 
-                if (isFloating) {
-                    Box(
-                        modifier = Modifier
-                            .onGloballyPositioned { bottomBarCoords = it }
-                            .graphicsLayer { alpha = editAlpha }
-                            .padding(bottom = screenHeight * 0.05f)
-                            .offset { IntOffset(greenBoxOffset.x.roundToInt(), greenBoxOffset.y.roundToInt()) }
-                            .pointerInput(isFloating) {
-                                detectDragGestures { c, d -> c.consume(); greenBoxOffset += d }
-                            }
-                            .pointerInput(isFloating) {
-                                detectTapGestures(onTap = { showShortcutPopup = true })
-                            }
-                            .clip(RoundedCornerShape(30.dp))
-                            .border(2.dp, Color.LightGray, RoundedCornerShape(30.dp)),
-                    ) {
-                        LockStarBar()
-                    }
+            if (isFloating) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .onGloballyPositioned { bottomBarCoords = it }
+                        .graphicsLayer { alpha = editAlpha }
+                        .padding(bottom = screenHeight * 0.05f)
+                        .offset { IntOffset(greenBoxOffset.x.roundToInt(), greenBoxOffset.y.roundToInt()) }
+                        .pointerInput(isFloating) {
+                            detectDragGestures { c, d -> c.consume(); greenBoxOffset += d }
+                        }
+                        .pointerInput(isFloating) {
+                            detectTapGestures(onTap = { showShortcutPopup = true })
+                        }
+                        .clip(RoundedCornerShape(30.dp))
+                        .border(2.dp, Color.LightGray, RoundedCornerShape(30.dp)),
+                ) {
+                    LockStarBar()
                 }
             }
 
