@@ -244,14 +244,27 @@ object GeminiClient {
                 - 배경은 반드시 투명(transparent). 사각형 카드/프레임/박스/UI 요소 없이 모티프 주제만 그립니다.
                 - 이미지에는 글자/숫자/기호를 절대 그리지 마세요. (텍스트는 앱이 따로 얹습니다.)
 
-                영어로 된 imagePrompt를 작성하되, 위에서 정한 요소의 종류와 대략적 위치(퍼센트)를 명시해
-                나중에 앱이 얹을 텍스트가 그 요소 위에 정확히 오도록 하세요.
+                imagePrompt(영어)는 키워드 나열이 아니라, 상상한 장면을 글로 묘사하는 "상세 설명"이어야 합니다.
+                반드시 아래 내용을 모두 담으세요.
+                1) 모티프를 바탕으로 상상한 전체 장면 묘사. (예: "동물원"이면 어떤 동물원 풍경인지 구체적으로)
+                2) 정보 항목마다 한 문장씩: 그 정보를 담을 요소가 무엇이고, 어떻게 생겼으며,
+                   화면의 몇 % 위치에 있고, 그 위에 "어떤 정보(예: 날씨/온도/습도)"를 담기 위해
+                   매끈하게 비워둘지를 풀어서 설명하세요. (단, 실제 글자·숫자는 절대 그리지 말 것)
+                3) 위젯 가로:세로 비율($aspectLabel)에 맞는 구도로 그리도록 명시하세요.
+                4) 각 요소의 위치(%)는 아래 slots 의 x,y 와 반드시 일치시키세요.
+
+                좋은 imagePrompt 예시 (모티프=공룡, 정보=날씨·온도·습도):
+                "A whimsical fire-breathing dinosaur facing left, fully transparent background, 9:16 composition.
+                 The dinosaur breathes flame puffs. The large flame at about (62%,30%) is a smooth, rounded,
+                 calm clear area reserved to present the WEATHER condition. A medium flame at about (74%,52%)
+                 is a calm area reserved for the TEMPERATURE. A small sweat droplet on the dinosaur's brow at
+                 about (40%,22%) is a clear rounded area reserved for the HUMIDITY. No letters or numbers drawn."
 
                 반드시 JSON으로만 응답하세요. 다른 설명 없이 JSON만.
 
                 응답 스키마:
                 {
-                  "imagePrompt": "<영어 이미지 생성 프롬프트. 투명 배경, 글자 없음, 요소별 위치 명시>",
+                  "imagePrompt": "<위 1~4를 모두 담은 상세 영어 프롬프트>",
                   "slots": [
                     {"label": "온도", "value": "23°C", "x": 0.22, "y": 0.30, "w": 0.20, "h": 0.14, "fontScale": 1.1}
                   ]
@@ -294,16 +307,22 @@ object GeminiClient {
         aspectLabel: String,
     ): SketchScene {
         val slots = designSlotLayout(infoItems, aspectRatio)
-        val n = infoItems.size.coerceAtLeast(1)
+        val carriers = listOf("a large leaf", "a glowing planet", "a soft flame", "a round droplet")
+        val perItem = slots.mapIndexed { i, s ->
+            val cx = ((s.xRatio + s.widthRatio / 2f) * 100).toInt()
+            val cy = ((s.yRatio + s.heightRatio / 2f) * 100).toInt()
+            val carrier = carriers[i % carriers.size]
+            val label = s.label.ifBlank { "an info value" }
+            "$carrier at about ($cx%,$cy%) is a smooth, calm clear area reserved to present the \"$label\" information"
+        }.joinToString(". ")
         val imagePrompt = buildString {
-            append("A playful, elegant illustration of ")
+            append("A playful, elegant illustration imagined from \"")
             append(imageShape.trim().ifBlank { "a single charming subject" })
-            append(" on a fully transparent background. ")
-            append("Weave the information into the artwork by including $n distinct natural carrier elements ")
-            append("(such as large leaves, glowing planets, flames, or droplets) ")
-            append("spread naturally across the composition — not in a rigid grid. ")
-            append("Each carrier element should have a calm, simple clear area where a short piece of text can sit later. ")
-            append("Aspect ratio $aspectLabel.")
+            append("\" on a fully transparent background, $aspectLabel composition. ")
+            append("Weave each piece of information naturally into the scene: ")
+            if (perItem.isNotBlank()) append("$perItem. ")
+            append("Spread the elements naturally across the composition, not in a rigid grid. ")
+            append("No letters or numbers drawn anywhere.")
         }
         return SketchScene(imagePrompt, slots)
     }
