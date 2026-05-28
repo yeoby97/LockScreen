@@ -232,7 +232,7 @@ object GeminiClient {
                 [이미지 디자인 정보] — imagePrompt 작성에만 사용하세요
                 - 모티프: "${imageShape.trim()}"
                 - 위젯 비율: $aspectLabel
-                - 필요한 blank text pad 수: $itemCount개
+                - 필요한 blank text pad 수: ${itemCount}개
 
                 [슬롯 데이터] — slots JSON에만 사용하세요. imagePrompt에 절대 넣지 마세요.
                 $slotsData
@@ -250,7 +250,7 @@ object GeminiClient {
 
                 imagePrompt 구성 규칙:
                 - 1개의 dominant 오브젝트(+최대 2개 supporting). 전체 면적 60~80%.
-                - $itemCount개의 completely blank text pad 위치와 모양을 묘사.
+                - ${itemCount}개의 completely blank text pad 위치와 모양을 묘사.
                 - 전체 배경 풍경(하늘·땅·지평선) 금지. 멀리서 본 풍경 금지.
                 - no text, no numbers, no words, no category names anywhere in the image.
 
