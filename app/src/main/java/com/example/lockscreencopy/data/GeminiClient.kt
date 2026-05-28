@@ -30,9 +30,9 @@ object GeminiClient {
     private const val ENDPOINT =
         "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent"
 
-    private const val IMAGEN_MODEL = "imagen-3.0-generate-001"
-    private const val IMAGEN_ENDPOINT =
-        "https://generativelanguage.googleapis.com/v1beta/models/$IMAGEN_MODEL:predict"
+    private const val IMAGE_MODEL = "gemini-2.5-flash-image"
+    private const val IMAGE_ENDPOINT =
+        "https://generativelanguage.googleapis.com/v1beta/models/$IMAGE_MODEL:generateContent"
 
     // HTTP/2 협상 실패로 인한 "Connection reset"을 피하기 위해 HTTP/1.1만 사용
     private val client = OkHttpClient.Builder()
@@ -199,11 +199,9 @@ object GeminiClient {
     }
 
     /**
-     * Imagen으로 위젯 배경 이미지를 생성한다.
-     * 슬롯 좌표를 negative space 힌트로 변환하며, 가시적 박스나 텍스트는 금지.
-     * @param imageShape 사용자의 이미지 형상 설명 (예: "미니멀 유리질감 카드")
-     * @param slots 텍스트 슬롯 목록 — 위치 힌트로 프롬프트에 반영
-     * @param aspectRatio 그린 사각형의 가로/세로 비율
+     * Gemini 이미지 생성 모델로 위젯 배경 이미지를 생성한다.
+     * generateContent 엔드포인트 + responseModalities IMAGE 사용.
+     * aspectRatio는 파라미터가 아닌 프롬프트 텍스트에 명시.
      */
     suspend fun generateWidgetImage(
         imageShape: String,
@@ -213,23 +211,31 @@ object GeminiClient {
         if (API_KEY.isBlank() || API_KEY == "YOUR_GEMINI_API_KEY") {
             throw LlmException("Gemini API 키가 설정되지 않았습니다. GeminiClient.API_KEY를 채워주세요.")
         }
-        val prompt = buildImagenPrompt(imageShape, slots)
+        val aspectLabel = aspectRatioLabel(aspectRatio)
+        val prompt = buildImageGenPrompt(imageShape, slots, aspectLabel)
         val bodyJson = JSONObject().apply {
-            put("instances", JSONArray().put(JSONObject().put("prompt", prompt)))
-            put("parameters", JSONObject().apply {
-                put("sampleCount", 1)
-                put("aspectRatio", closestImagenAspectRatio(aspectRatio))
+            put("contents", JSONArray().put(
+                JSONObject().put("parts", JSONArray().put(
+                    JSONObject().put("text", prompt)
+                ))
+            ))
+            put("generationConfig", JSONObject().apply {
+                put("responseModalities", JSONArray().put("TEXT").put("IMAGE"))
             })
         }.toString()
         val request = Request.Builder()
-            .url("$IMAGEN_ENDPOINT?key=$API_KEY")
+            .url("$IMAGE_ENDPOINT?key=$API_KEY")
             .header("Content-Type", "application/json; charset=utf-8")
             .post(bodyJson.toRequestBody(jsonMedia))
             .build()
-        callImagenWithRetry(request)
+        callImageGenWithRetry(request)
     }
 
-    private fun buildImagenPrompt(imageShape: String, slots: List<AiTextSlot>): String {
+    private fun buildImageGenPrompt(
+        imageShape: String,
+        slots: List<AiTextSlot>,
+        aspectRatio: String,
+    ): String {
         val spaceHints = slots.joinToString(". ") { s ->
             val x1 = (s.xRatio * 100).toInt()
             val y1 = (s.yRatio * 100).toInt()
@@ -246,6 +252,7 @@ object GeminiClient {
         return buildString {
             append(imageShape.trim())
             append(" style widget skin for a smartphone lock screen. ")
+            append("Aspect ratio $aspectRatio. ")
             if (spaceHints.isNotBlank()) append("$spaceHints. ")
             append("Do NOT draw visible boxes, frames, input fields, placeholder rectangles, or UI chrome. ")
             append("Do NOT render any letters, numbers, symbols, fake text, labels, or watermarks anywhere. ")
@@ -256,7 +263,7 @@ object GeminiClient {
         }
     }
 
-    private fun callImagenWithRetry(request: Request): ByteArray {
+    private fun callImageGenWithRetry(request: Request): ByteArray {
         var lastErr: Throwable? = null
         for (attempt in 1..MAX_ATTEMPTS) {
             try {
@@ -266,9 +273,9 @@ object GeminiClient {
                         if (resp.code in 500..599 && attempt < MAX_ATTEMPTS) {
                             lastErr = LlmException("서버 오류 ${resp.code}"); return@use
                         }
-                        throw LlmException("Imagen 호출 실패 (${resp.code}): ${raw.take(300)}")
+                        throw LlmException("이미지 생성 호출 실패 (${resp.code}): ${raw.take(300)}")
                     }
-                    return parseImagenBytes(raw)
+                    return parseImageGenBytes(raw)
                 }
             } catch (e: LlmException) {
                 throw e
@@ -278,20 +285,37 @@ object GeminiClient {
                 Thread.sleep(300L * attempt)
             }
         }
-        throw LlmException("Imagen 호출 실패", lastErr)
+        throw LlmException("이미지 생성 호출 실패", lastErr)
     }
 
-    private fun parseImagenBytes(raw: String): ByteArray {
+    private fun parseImageGenBytes(raw: String): ByteArray {
         val root = JSONObject(raw)
-        val predictions = root.optJSONArray("predictions")
-            ?: throw LlmException("Imagen 응답에 predictions 없음")
-        if (predictions.length() == 0) throw LlmException("Imagen 응답이 비어있습니다")
-        val encoded = predictions.getJSONObject(0).optString("bytesBase64Encoded", "")
-        if (encoded.isBlank()) throw LlmException("Imagen 이미지 데이터 없음")
-        return android.util.Base64.decode(encoded, android.util.Base64.DEFAULT)
+        val candidates = root.optJSONArray("candidates")
+            ?: throw LlmException("이미지 생성 응답에 candidates 없음")
+        if (candidates.length() == 0) throw LlmException("이미지 생성 응답이 비어있습니다")
+        val parts = candidates.getJSONObject(0)
+            .optJSONObject("content")
+            ?.optJSONArray("parts")
+            ?: throw LlmException("이미지 응답에 content.parts 없음")
+
+        val textBuf = StringBuilder()
+        for (i in 0 until parts.length()) {
+            val part = parts.getJSONObject(i)
+            val inlineData = part.optJSONObject("inlineData")
+            if (inlineData != null) {
+                val encoded = inlineData.optString("data", "")
+                if (encoded.isNotBlank()) {
+                    return android.util.Base64.decode(encoded, android.util.Base64.DEFAULT)
+                }
+            }
+            val text = part.optString("text", "")
+            if (text.isNotBlank()) textBuf.append(text)
+        }
+        val hint = if (textBuf.isNotBlank()) " 모델 응답: ${textBuf.take(300)}" else ""
+        throw LlmException("이미지 데이터(inlineData)가 없습니다.$hint")
     }
 
-    private fun closestImagenAspectRatio(ratio: Float): String = when {
+    private fun aspectRatioLabel(ratio: Float): String = when {
         ratio >= 1.5f -> "16:9"
         ratio >= 1.1f -> "4:3"
         ratio >= 0.65f -> "1:1"
