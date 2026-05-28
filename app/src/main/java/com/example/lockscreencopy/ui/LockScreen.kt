@@ -29,6 +29,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material3.Button
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -92,6 +94,7 @@ import com.example.lockscreencopy.data.NotificationRepository
 import com.example.lockscreencopy.data.isNotificationListenerEnabled
 import com.example.lockscreencopy.data.openNotificationListenerSettings
 import com.example.lockscreencopy.data.openUsageAccessSettings
+import com.example.lockscreencopy.data.sampleNotifications
 import com.example.lockscreencopy.data.topUsedAppsWithGap
 import com.example.lockscreencopy.ui.notification.NotificationPermissionBanner
 import com.example.lockscreencopy.ui.notification.NudgeNotificationDisplay
@@ -164,7 +167,10 @@ fun LockScreen(
     var showLockWidgetPicker by remember { mutableStateOf(false) }
     var showRealWidgetPicker by remember { mutableStateOf(false) }
 
-    val notifications by NotificationRepository.notifications.collectAsState()
+    val realNotifications by NotificationRepository.notifications.collectAsState()
+    val dummyNotifications = remember { sampleNotifications() }
+    var useDummyNotifications by remember { mutableStateOf(false) }
+    val notifications = if (useDummyNotifications) dummyNotifications else realNotifications
     var nudgeDisplayMode by remember { mutableStateOf(NudgeDisplayMode.CARD) }
 
     var hasNotificationPermission by remember { mutableStateOf(isNotificationListenerEnabled(context)) }
@@ -1007,6 +1013,14 @@ fun LockScreen(
                     .padding(end = 24.dp, bottom = screenHeight * 0.28f)
                     .graphicsLayer { alpha = editAlpha },
             )
+            NotificationSourceButton(
+                useDummy = useDummyNotifications,
+                onToggle = { useDummyNotifications = !useDummyNotifications },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 24.dp, bottom = screenHeight * 0.40f)
+                    .graphicsLayer { alpha = editAlpha },
+            )
         }
 
         if (showAiChooser) {
@@ -1232,6 +1246,47 @@ private fun NudgeDisplayModeButton(
         ) {
             Text(
                 text = "넛지: $modeLabel",
+                color = Color.White,
+                fontSize = 10.sp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun NotificationSourceButton(
+    useDummy: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val dummyOrange = Color(0xFFFF9500)
+    val liveGreen = Color(0xFF34C759)
+    val color = if (useDummy) dummyOrange else liveGreen
+    val label = if (useDummy) "더미" else "실시간"
+    val icon = if (useDummy) Icons.Filled.Science else Icons.Filled.NotificationsActive
+
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        FloatingActionButton(
+            onClick = onToggle,
+            containerColor = color,
+            contentColor = Color.White,
+            shape = CircleShape,
+            modifier = Modifier.size(48.dp),
+        ) {
+            Icon(icon, contentDescription = "알림 소스 전환")
+        }
+        Spacer(Modifier.height(4.dp))
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.Black.copy(alpha = 0.5f))
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+        ) {
+            Text(
+                text = label,
                 color = Color.White,
                 fontSize = 10.sp,
             )
