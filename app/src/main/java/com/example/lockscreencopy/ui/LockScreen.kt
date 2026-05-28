@@ -34,7 +34,9 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
@@ -43,6 +45,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -71,7 +76,6 @@ import com.example.lockscreencopy.model.BottomShortcut
 import com.example.lockscreencopy.model.FavoriteAppsLayout
 import com.example.lockscreencopy.model.FloatingWidget
 import com.example.lockscreencopy.model.HostedAppWidget
-import com.example.lockscreencopy.model.NotificationItem
 import com.example.lockscreencopy.model.NudgeDisplayMode
 import com.example.lockscreencopy.model.PlacedWidget
 import com.example.lockscreencopy.model.WidgetSize
@@ -84,9 +88,12 @@ import com.example.lockscreencopy.data.hasUsageStatsPermission
 import com.example.lockscreencopy.data.launchAppShortcut
 import com.example.lockscreencopy.data.loadInstalledApps
 import com.example.lockscreencopy.data.loadWeeklyUsage
+import com.example.lockscreencopy.data.NotificationRepository
+import com.example.lockscreencopy.data.isNotificationListenerEnabled
+import com.example.lockscreencopy.data.openNotificationListenerSettings
 import com.example.lockscreencopy.data.openUsageAccessSettings
-import com.example.lockscreencopy.data.sampleNotifications
 import com.example.lockscreencopy.data.topUsedAppsWithGap
+import com.example.lockscreencopy.ui.notification.NotificationPermissionBanner
 import com.example.lockscreencopy.ui.notification.NudgeNotificationDisplay
 import com.example.lockscreencopy.ui.llm.GhostInstance
 import com.example.lockscreencopy.ui.llm.LlmAppStrip
@@ -157,8 +164,20 @@ fun LockScreen(
     var showLockWidgetPicker by remember { mutableStateOf(false) }
     var showRealWidgetPicker by remember { mutableStateOf(false) }
 
-    val notifications by remember { mutableStateOf<List<NotificationItem>>(sampleNotifications()) }
+    val notifications by NotificationRepository.notifications.collectAsState()
     var nudgeDisplayMode by remember { mutableStateOf(NudgeDisplayMode.CARD) }
+
+    var hasNotificationPermission by remember { mutableStateOf(isNotificationListenerEnabled(context)) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val obs = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasNotificationPermission = isNotificationListenerEnabled(context)
+            }
+        }
+        lifecycle.addObserver(obs)
+        onDispose { lifecycle.removeObserver(obs) }
+    }
 
     var favoriteApps by remember { mutableStateOf(listOf<BottomShortcut>()) }
     var favoriteAppsEnabled by remember { mutableStateOf(true) }
@@ -656,11 +675,18 @@ fun LockScreen(
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
-                NudgeNotificationDisplay(
-                    notifications = notifications,
-                    mode = nudgeDisplayMode,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                if (!hasNotificationPermission) {
+                    NotificationPermissionBanner(
+                        onOpenSettings = { openNotificationListenerSettings(context) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    NudgeNotificationDisplay(
+                        notifications = notifications,
+                        mode = nudgeDisplayMode,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
 
                 if (isFloating) {
                     Box(

@@ -8,6 +8,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -29,6 +30,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -366,6 +369,40 @@ private fun DotModeIndicator(notifications: List<NotificationItem>, modifier: Mo
                         .background(Color.White.copy(alpha = 0.5f)),
                 )
             }
+        }
+    }
+}
+
+// ───────────────────────────────────────
+//  권한 안내 배너
+// ───────────────────────────────────────
+
+@Composable
+fun NotificationPermissionBanner(onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color(0xCC2A2A2C))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = "알림 접근 권한이 필요합니다",
+            color = Color.White.copy(alpha = 0.85f),
+            fontSize = 13.sp,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(8.dp))
+        Button(
+            onClick = onOpenSettings,
+            colors = ButtonDefaults.buttonColors(containerColor = nudgePurple),
+            border = BorderStroke(0.dp, Color.Transparent),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+        ) {
+            Text("설정", color = Color.White, fontSize = 12.sp)
         }
     }
 }
