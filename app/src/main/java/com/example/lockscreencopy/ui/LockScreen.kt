@@ -122,6 +122,9 @@ import kotlinx.coroutines.withTimeout
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlin.math.roundToInt
 import android.graphics.BitmapFactory
+import android.widget.Toast
+import com.example.lockscreencopy.model.AiTextSlot
+import com.example.lockscreencopy.model.InfoSource
 
 private enum class ShortcutSide { LEFT, RIGHT }
 
@@ -699,6 +702,12 @@ fun LockScreen(
                     onDelete = {
                         if (selectedFloatingUid == w.uid) selectedFloatingUid = null
                         aiSketchWidgets = aiSketchWidgets.filter { it.uid != w.uid }
+                    },
+                    onSlotClick = { slot ->
+                        val sourceTag = if (slot.source == InfoSource.REAL) "REAL" else "SAMPLE"
+                        val msg = "[${slot.label}] ${slot.value}  ($sourceTag)"
+                        android.util.Log.d("AiSlot", msg)
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                     },
                 )
             }

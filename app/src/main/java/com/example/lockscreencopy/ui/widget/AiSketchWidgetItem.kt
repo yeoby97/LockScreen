@@ -57,6 +57,7 @@ fun AiSketchWidgetItem(
     onDrag: (Offset) -> Unit,
     onResize: (Float, Float, Float, Float) -> Unit,
     onDelete: () -> Unit,
+    onSlotClick: ((AiTextSlot) -> Unit)? = null,
 ) {
     val widthDp = (widget.widthDp * widget.scaleX).dp
     val heightDp = (widget.heightDp * widget.scaleY).dp
@@ -106,7 +107,14 @@ fun AiSketchWidgetItem(
             }
 
             // 슬롯 기반 텍스트 오버레이
-            SlotTextOverlay(slots = widget.textSlots, scaleX = widget.scaleX, scaleY = widget.scaleY)
+            // isFloating=false일 때만 슬롯 클릭 활성화 (편집 모드에선 위젯 전체 드래그가 우선)
+            SlotTextOverlay(
+                slots = widget.textSlots,
+                scaleX = widget.scaleX,
+                scaleY = widget.scaleY,
+                isInteractive = !isFloating,
+                onSlotClick = onSlotClick,
+            )
         }
 
         // 편집 모드 테두리 — clip 바깥에서 그려야 완전히 보임
@@ -128,7 +136,13 @@ fun AiSketchWidgetItem(
  * 이미지 생성 프롬프트의 negative space 위치와 1:1 대응하도록 설계됨.
  */
 @Composable
-private fun SlotTextOverlay(slots: List<AiTextSlot>, scaleX: Float = 1f, scaleY: Float = 1f) {
+private fun SlotTextOverlay(
+    slots: List<AiTextSlot>,
+    scaleX: Float = 1f,
+    scaleY: Float = 1f,
+    isInteractive: Boolean = false,
+    onSlotClick: ((AiTextSlot) -> Unit)? = null,
+) {
     if (slots.isEmpty()) return
     // 위젯 리사이즈 시 텍스트 크기를 자연스럽게 따라가되 너무 크거나 작아지지 않도록 clamp
     val scaleFactor = min(scaleX, scaleY).coerceIn(0.65f, 1.8f)
@@ -144,7 +158,14 @@ private fun SlotTextOverlay(slots: List<AiTextSlot>, scaleX: Float = 1f, scaleY:
                 modifier = Modifier
                     .offset(x = x, y = y)
                     .width(w)
-                    .height(h),
+                    .height(h)
+                    .then(
+                        if (isInteractive && onSlotClick != null) {
+                            Modifier.pointerInput(slot.label) {
+                                detectTapGestures { onSlotClick(slot) }
+                            }
+                        } else Modifier,
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 Column(
