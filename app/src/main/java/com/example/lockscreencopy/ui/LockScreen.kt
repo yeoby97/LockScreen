@@ -71,6 +71,7 @@ import com.example.lockscreencopy.model.FloatingWidget
 import com.example.lockscreencopy.model.HostedAppWidget
 import com.example.lockscreencopy.model.PlacedWidget
 import com.example.lockscreencopy.model.WidgetSize
+import com.example.lockscreencopy.data.DataSourceResolver
 import com.example.lockscreencopy.data.GeminiClient
 import com.example.lockscreencopy.data.handleSystemAction
 import com.example.lockscreencopy.data.hasUsageStatsPermission
@@ -1014,9 +1015,12 @@ fun LockScreen(
                                 return@launch
                             }
 
-                            // 2. 정보가 모티프의 자연 요소(잎/행성/불꽃/땀방울)에 녹아들도록 장면 설계
+                            // 1b. 실제 데이터 소스 해석 (배터리/시간/날짜는 실제값, 나머지는 샘플값 유지)
+                            val resolvedItems = DataSourceResolver.resolve(context, parsedItems)
+
+                            // 2. text pad 위치가 있는 위젯 스킨 장면 설계
                             val scene = GeminiClient.designSketchScene(
-                                infoItems = parsedItems,
+                                infoItems = resolvedItems,
                                 imageShape = imageShape,
                                 aspectRatio = aspectRatio,
                             )

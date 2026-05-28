@@ -2,7 +2,9 @@ package com.example.lockscreencopy.data
 
 import com.example.lockscreencopy.model.AiTextSlot
 import com.example.lockscreencopy.model.BottomShortcut
+import com.example.lockscreencopy.model.InfoSource
 import com.example.lockscreencopy.model.LockWidget
+import com.example.lockscreencopy.model.ResolvedInfoItem
 import com.example.lockscreencopy.model.WidgetSize
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -209,12 +211,12 @@ object GeminiClient {
     }
 
     /**
-     * 정보 항목 + 그림 모티프를 받아, 각 정보가 모티프의 자연스러운 요소에
-     * 녹아드는 장면을 설계한다. (영어 이미지 프롬프트 + 정보별 위치 슬롯)
+     * 해석된 정보 항목 + 그림 모티프를 받아, text pad가 있는 위젯 스킨 장면을 설계한다.
+     * (영어 이미지 프롬프트 + 정보별 위치 슬롯 + anchorObject)
      * API 키가 없거나 호출이 실패하면 로컬 규칙 기반 fallback 장면을 만든다.
      */
     suspend fun designSketchScene(
-        infoItems: List<Pair<String, String>>,
+        infoItems: List<ResolvedInfoItem>,
         imageShape: String,
         aspectRatio: Float,
     ): SketchScene = withContext(Dispatchers.IO) {
@@ -223,60 +225,67 @@ object GeminiClient {
             return@withContext fallbackScene(infoItems, imageShape, aspectRatio, aspectLabel)
         }
         runCatching {
-            val itemsText = infoItems.joinToString(", ") { "${it.first}=${it.second}" }
+            val itemsText = infoItems.joinToString(", ") { "${it.label}=${it.value}" }
             val prompt = """
                 사용자가 잠금화면 위젯 스킨으로 원하는 모티프: "${imageShape.trim()}"
                 위젯에 표시할 정보 항목(레이블=값): $itemsText
                 위젯 가로:세로 비율: $aspectLabel
 
                 이 모티프를 바탕으로 "잠금화면 위젯 스킨 에셋"을 설계하세요.
-                전체 풍경·배경 장면이 아니라, 실제 위젯으로 쓸 수 있는 큼직한 스티커형 오브젝트입니다.
+                전체 풍경 일러스트가 아니라, 락스크린 위젯에 바로 쓸 수 있는 큼직한 스킨입니다.
 
-                설계 규칙:
-                - 오브젝트는 1~3개의 크고 선명한 요소로만 구성합니다. 작은 요소를 여러 개 흩뿌리지 마세요.
+                절대 하지 마세요:
+                - 전체 배경 풍경(하늘·땅·지평선)을 만들지 마세요.
+                - 작은 오브젝트를 여러 개 흩뿌리지 마세요.
+                - 멀리서 본 풍경처럼 그리지 마세요.
+
+                반드시 해주세요:
+                - 1개의 dominant 오브젝트(또는 최대 3개)를 중심으로 구성하세요.
                 - 주요 오브젝트가 위젯 면적의 60~80%를 차지해야 합니다.
-                - 각 정보를 올려놓을 수 있는 넓고 단순한 면(smooth surface)이 오브젝트 위에 있어야 합니다.
-                - 스티커형(sticker-like) 또는 소프트 카드형(soft card base) 구성이어도 됩니다.
-                - 전체 장면(풍경·하늘·땅·배경)은 피하세요.
-                - 좌표는 위젯 좌상단(0,0)에서 우하단(1,1)까지의 정규화 비율.
-                  x,y는 텍스트 영역 좌상단, w,h는 너비/높이 비율.
-                - 이미지에 글자/숫자/기호는 절대 그리지 마세요.
-                - 배경은 투명(transparent) 기본. 단, 오브젝트 자체의 카드 베이스/글래스 패널은 허용.
+                - 정보 항목마다 텍스트를 올릴 "large smooth text pad"를 오브젝트 위에 배치하세요.
+                - text pad는 흰색/크림색/부드러운 라벨/반투명 글래스 느낌이어도 됩니다.
+                - 각 text pad는 텍스트가 들어갈 만큼 충분히 넓어야 합니다 (w≥0.30, h≥0.16 권장).
+                - text pad 위에 글자/숫자를 절대 그리지 마세요. (텍스트는 앱이 Compose로 올립니다.)
+                - 배경은 투명. 단, 오브젝트의 카드 베이스나 글래스 패널은 허용.
 
-                imagePrompt(영어)는 상상한 위젯 스킨을 구체적으로 묘사해야 합니다:
-                1) 모티프에서 뽑아낸 1~3개의 큰 오브젝트가 무엇이고 어떻게 생겼는지
-                2) 각 정보를 담을 smooth surface의 위치와 모양 (slots x,y와 일치)
-                3) 위젯 비율($aspectLabel)에 맞는 구도
-                4) "large lock screen widget skin", "not a full scene", "few large elements only",
-                   "subject occupies 60 to 80 percent", "no tiny scattered details" 문구 포함
+                좌표 규칙:
+                - 위젯 좌상단(0,0)에서 우하단(1,1)까지 정규화 비율
+                - x,y는 text pad의 좌상단, w,h는 너비/높이
+                - anchorObject는 이 text pad가 붙은 오브젝트 이름 (영어 짧게, 예: "sheep torso")
 
-                좋은 예시 (모티프=양떼목장, 정보=온도·비·자외선·걸음수):
-                "A large cute fluffy sheep as a sticker-like lock screen widget skin, transparent background,
-                 $aspectLabel. Large lock screen widget skin, not a full scene, few large elements only,
-                 subject occupies 60 to 80 percent of the widget area. The sheep body fills most of the widget.
-                 The sheep's fluffy torso at about (20%,30%) is a large smooth rounded surface reserved for
-                 TEMPERATURE text. A soft rain cloud above at (55%,12%) is a rounded calm shape reserved for
-                 RAIN. A simple sun motif at (68%,58%) is a smooth glowing circle reserved for UV index.
-                 The sheep's feet area at (28%,72%) is a clean grassy patch reserved for STEP count.
-                 No background landscape. No tiny scattered details. No text, no numbers."
+                좋은 예시 (모티프=양떼목장, 정보=온도·비·걸음수·배터리):
+                imagePrompt: "A large fluffy sheep sticker as a lock screen widget skin, transparent background,
+                 $aspectLabel. Large lock screen widget skin, not a full scenic illustration,
+                 few large elements only, subject occupies 70 percent of the widget area.
+                 Do not draw many small objects. Do not draw a distant landscape.
+                 One dominant sheep body and 2 supporting prop objects.
+                 Four large text pads, each large enough for readable text:
+                 (1) sheep body torso at (8%,26%) — a large smooth cream oval text pad for TEMPERATURE.
+                 (2) a soft cloud sign above the sheep at (52%,8%) — a rounded white label pad for RAIN.
+                 (3) a wooden haystack sign at (8%,64%) — a wide flat sign panel for STEP count.
+                 (4) a lantern glow area at (60%,62%) — a soft oval glow pad for BATTERY.
+                 No background landscape. No tiny scattered details. No text, no numbers, no fake letters."
 
                 반드시 JSON으로만 응답하세요. 다른 설명 없이 JSON만.
 
                 응답 스키마:
                 {
-                  "imagePrompt": "<위 내용을 담은 상세 영어 프롬프트>",
+                  "imagePrompt": "...",
                   "slots": [
-                    {"label": "온도", "value": "23°C", "x": 0.22, "y": 0.30, "w": 0.20, "h": 0.14, "fontScale": 1.1}
+                    {"label": "온도", "value": "23°C", "anchorObject": "sheep torso", "x": 0.08, "y": 0.26, "w": 0.38, "h": 0.18, "fontScale": 1.1}
                   ]
                 }
             """.trimIndent()
             val raw = callGemini(prompt)
-            parseSketchScene(raw).takeIf { it.slots.isNotEmpty() && it.imagePrompt.isNotBlank() }
+            parseSketchScene(raw, infoItems).takeIf { it.slots.isNotEmpty() && it.imagePrompt.isNotBlank() }
                 ?: fallbackScene(infoItems, imageShape, aspectRatio, aspectLabel)
         }.getOrElse { fallbackScene(infoItems, imageShape, aspectRatio, aspectLabel) }
     }
 
-    private fun parseSketchScene(text: String): SketchScene {
+    private fun parseSketchScene(
+        text: String,
+        resolvedItems: List<ResolvedInfoItem> = emptyList(),
+    ): SketchScene {
         val obj = runCatching { JSONObject(sanitizeJson(text)) }.getOrNull()
             ?: return SketchScene("", emptyList())
         val imagePrompt = obj.optString("imagePrompt", "").trim()
@@ -288,47 +297,56 @@ object GeminiClient {
             if (label.isBlank() && value.isBlank()) return@List null
             val x = o.optDouble("x", 0.1).toFloat().coerceIn(0f, 0.95f)
             val y = o.optDouble("y", 0.1).toFloat().coerceIn(0f, 0.95f)
-            val w = o.optDouble("w", 0.25).toFloat().coerceIn(0.05f, 1f).coerceAtMost(1f - x)
-            val h = o.optDouble("h", 0.15).toFloat().coerceIn(0.05f, 1f).coerceAtMost(1f - y)
+            val w = o.optDouble("w", 0.30).toFloat().coerceIn(0.10f, 1f).coerceAtMost(1f - x)
+            val h = o.optDouble("h", 0.18).toFloat().coerceIn(0.10f, 1f).coerceAtMost(1f - y)
             val fs = o.optDouble("fontScale", 1.0).toFloat().coerceIn(0.5f, 2.5f)
-            AiTextSlot(label, value, "main", x, y, w, h, fs)
+            val anchor = o.optString("anchorObject", "").trim()
+            // 레이블 매칭으로 실제 출처(REAL/SAMPLE) 설정
+            val source = resolvedItems.firstOrNull { it.label == label }?.source ?: InfoSource.SAMPLE
+            AiTextSlot(label, value, "main", x, y, w, h, fs, anchor, source)
         }.filterNotNull().take(4)
         return SketchScene(imagePrompt, slots)
     }
 
     /**
      * LLM 없이도 동작하는 fallback 장면.
-     * 위치는 규칙 기반 슬롯을 재사용하되, 프롬프트는 투명 배경 + 자연 요소 강조로 구성.
+     * 위치는 규칙 기반 슬롯을 재사용하되, text pad 중심 widget skin 프롬프트로 구성.
      */
     private fun fallbackScene(
-        infoItems: List<Pair<String, String>>,
+        infoItems: List<ResolvedInfoItem>,
         imageShape: String,
         aspectRatio: Float,
         aspectLabel: String,
     ): SketchScene {
-        val slots = designSlotLayout(infoItems, aspectRatio)
-        val surfaces = listOf(
-            "a large smooth rounded body surface",
-            "a soft glowing panel area",
-            "a calm flat rounded patch",
-            "a clean simple base area",
+        val pairs = infoItems.map { it.label to it.value }
+        val baseSlots = designSlotLayout(pairs, aspectRatio)
+        val pads = listOf(
+            "large smooth rounded body text pad",
+            "soft glowing label panel",
+            "calm flat sign text pad",
+            "clean simple oval text pad",
         )
-        val perItem = slots.mapIndexed { i, s ->
+        val slots = baseSlots.mapIndexed { i, s ->
+            val source = infoItems.getOrNull(i)?.source ?: InfoSource.SAMPLE
+            s.copy(anchorObject = pads[i % pads.size], source = source)
+        }
+        val perPad = slots.mapIndexed { i, s ->
             val cx = ((s.xRatio + s.widthRatio / 2f) * 100).toInt()
             val cy = ((s.yRatio + s.heightRatio / 2f) * 100).toInt()
-            val surface = surfaces[i % surfaces.size]
+            val pad = pads[i % pads.size]
             val label = s.label.ifBlank { "an info value" }
-            "$surface at about ($cx%,$cy%) reserved for \"$label\" text overlay"
+            "a $pad at about ($cx%,$cy%) reserved for \"$label\" text"
         }.joinToString(". ")
         val imagePrompt = buildString {
             append("A large clean lock screen widget skin based on \"")
             append(imageShape.trim().ifBlank { "a single charming subject" })
             append("\", fully transparent background, $aspectLabel composition. ")
-            append("Large lock screen widget skin, not a full scene, few large elements only, ")
-            append("subject occupies 60 to 80 percent of the widget area, clean sticker-like composition, ")
-            append("no tiny scattered details. Each object has smooth readable surfaces: ")
-            if (perItem.isNotBlank()) append("$perItem. ")
-            append("No background landscape. No text, no numbers.")
+            append("Large lock screen widget skin, not a full scenic illustration, ")
+            append("few large elements only, subject occupies 60 to 80 percent of the widget area. ")
+            append("Do not draw many small objects. Do not draw a distant landscape. ")
+            append("Each object has large smooth text pads, each large enough for readable text: ")
+            if (perPad.isNotBlank()) append("$perPad. ")
+            append("No background landscape. No tiny scattered details. No text, no numbers, no fake letters.")
         }
         return SketchScene(imagePrompt, slots)
     }
@@ -362,14 +380,17 @@ object GeminiClient {
     }
 
     private const val IMAGE_SAFETY_SUFFIX =
-        " IMPORTANT: This is a large lock screen widget skin asset — NOT a full scene, NOT a landscape " +
-            "illustration. Use only 1 to 3 large dominant objects filling 60 to 80 percent of the widget area. " +
-            "Clean sticker-like composition. No tiny scattered details. No full background, no sky, no floor. " +
-            "Each object must have large smooth readable surfaces so text can be overlaid on them later. " +
-            "Fully transparent background (PNG alpha). A soft card base or glass panel base on the object is " +
-            "allowed if it makes the widget look polished. No rectangular UI frame or border around the whole image. " +
+        " IMPORTANT: This is a large lock screen widget skin asset — NOT a full scenic illustration. " +
+            "Do not draw many small objects. Do not draw a distant landscape or background scene. " +
+            "Use one dominant central object and at most 2 large supporting objects. " +
+            "Subject occupies 60 to 80 percent of the widget area. " +
+            "Each object MUST have large smooth text pads — white, cream, glass-like, or soft label areas " +
+            "clearly visible and large enough for readable text overlay (minimum 30 percent width each). " +
+            "Prefer big soft shapes: stickers, signs, clouds, labels, ribbons, or panels as text pads. " +
+            "Fully transparent background (PNG alpha). A soft card base on the main object is allowed. " +
+            "No rectangular UI frame or border around the whole image. " +
             "Do NOT render any letters, numbers, symbols, fake labels, or watermarks anywhere. " +
-            "High quality, polished widget skin asset."
+            "High quality, polished lock screen widget skin asset."
 
     private fun callImageGenWithRetry(request: Request): ByteArray {
         var lastErr: Throwable? = null
