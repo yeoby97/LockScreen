@@ -72,6 +72,7 @@ import com.example.lockscreencopy.model.HostedAppWidget
 import com.example.lockscreencopy.model.PlacedWidget
 import com.example.lockscreencopy.model.WidgetSize
 import com.example.lockscreencopy.data.GeminiClient
+import com.example.lockscreencopy.data.designSlotLayout
 import com.example.lockscreencopy.data.handleSystemAction
 import com.example.lockscreencopy.data.hasUsageStatsPermission
 import com.example.lockscreencopy.data.launchAppShortcut
@@ -979,22 +980,36 @@ fun LockScreen(
                     sketchScope.launch {
                         try {
                             val aspectRatio = (rect.right - rect.left) / (rect.bottom - rect.top)
-                            val infoItems = infoQuery.split(",").map { it.trim() }.filter { it.isNotBlank() }
+
+                            // 1. LLM이 자연어 정보 입력 → (레이블, 샘플값) 쌍 목록으로 파싱
+                            val parsedItems = GeminiClient.parseInfoItems(infoQuery)
+                            if (parsedItems.isEmpty()) {
+                                sketchError = "정보 항목을 파악할 수 없어요. 다시 입력해 보세요."
+                                sketchLoading = false
+                                return@launch
+                            }
+
+                            // 2. 항목 수 + 비율 기반 슬롯 좌표 설계
+                            val slots = designSlotLayout(parsedItems, aspectRatio)
+
+                            // 3. 슬롯 좌표를 negative space 힌트로 Imagen 프롬프트 구성 후 이미지 생성
                             val imageBytes = GeminiClient.generateWidgetImage(
                                 imageShape = imageShape,
-                                infoItems = infoItems,
+                                slots = slots,
                                 aspectRatio = aspectRatio,
                             )
                             val bitmap = withContext(Dispatchers.Default) {
                                 BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
                             }
+
+                            // 4. 슬롯 + 이미지 + 위치/크기로 위젯 생성
                             val widthDp = with(density) { (rect.right - rect.left).toDp().value }
                             val heightDp = with(density) { (rect.bottom - rect.top).toDp().value }
                             aiSketchCounter++
                             aiSketchWidgets = aiSketchWidgets + AiSketchWidget(
                                 uid = "ai_sketch_$aiSketchCounter",
                                 imageBitmap = bitmap,
-                                infoItems = infoItems,
+                                textSlots = slots,
                                 offset = Offset(rect.left, rect.top),
                                 widthDp = widthDp,
                                 heightDp = heightDp,

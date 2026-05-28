@@ -1,5 +1,6 @@
 package com.example.lockscreencopy.data
 
+import com.example.lockscreencopy.model.AiTextSlot
 import com.example.lockscreencopy.model.BottomShortcut
 import com.example.lockscreencopy.model.LockWidget
 import com.example.lockscreencopy.model.WidgetSize
@@ -132,35 +133,92 @@ object GeminiClient {
     }
 
     /**
+     * 사용자의 자연어 정보 입력을 (레이블, 샘플값) 쌍 목록으로 파싱.
+     * API 키가 없거나 LLM 호출이 실패하면 콤마 split + 더미값으로 fallback.
+     */
+    suspend fun parseInfoItems(userQuery: String): List<Pair<String, String>> =
+        withContext(Dispatchers.IO) {
+            if (API_KEY.isBlank() || API_KEY == "YOUR_GEMINI_API_KEY") {
+                return@withContext commaFallback(userQuery)
+            }
+            runCatching {
+                val prompt = """
+                    사용자가 잠금화면 위젯에 표시하고 싶은 정보를 입력했습니다: "${userQuery.trim()}"
+
+                    이 입력을 위젯에 표시할 정보 항목 목록으로 변환해주세요.
+                    각 항목은 2~6자의 짧은 레이블과 그 정보의 대표 샘플 값으로 구성됩니다.
+                    최대 4개 항목만. 반드시 JSON으로만 응답하세요.
+
+                    응답 스키마:
+                    {"items": [{"label": "날씨", "value": "맑음"}, {"label": "온도", "value": "23°C"}]}
+                """.trimIndent()
+                val raw = callGemini(prompt)
+                parseInfoItemsJson(raw).takeIf { it.isNotEmpty() } ?: commaFallback(userQuery)
+            }.getOrElse { commaFallback(userQuery) }
+        }
+
+    private fun parseInfoItemsJson(text: String): List<Pair<String, String>> {
+        val obj = runCatching { JSONObject(sanitizeJson(text)) }.getOrNull() ?: return emptyList()
+        val arr = obj.optJSONArray("items") ?: return emptyList()
+        return List(arr.length()) { i ->
+            val item = arr.optJSONObject(i) ?: return@List null
+            val label = item.optString("label", "").trim()
+            val value = item.optString("value", "--").trim()
+            if (label.isBlank()) null else label to value
+        }.filterNotNull().take(4)
+    }
+
+    private fun commaFallback(userQuery: String): List<Pair<String, String>> =
+        userQuery.split(",")
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .take(4)
+            .map { label -> label to fallbackValueFor(label) }
+
+    private fun fallbackValueFor(label: String): String {
+        val lower = label.lowercase()
+        return when {
+            lower.contains("날씨") || lower.contains("weather") -> "맑음"
+            lower.contains("온도") || lower.contains("기온") || lower.contains("temp") -> "23°C"
+            lower.contains("습도") || lower.contains("humidity") -> "45%"
+            lower.contains("시간") || lower.contains("time") -> {
+                val cal = java.util.Calendar.getInstance()
+                "%d:%02d".format(cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE))
+            }
+            lower.contains("날짜") || lower.contains("date") -> {
+                val cal = java.util.Calendar.getInstance()
+                "${cal.get(java.util.Calendar.MONTH) + 1}월 ${cal.get(java.util.Calendar.DAY_OF_MONTH)}일"
+            }
+            lower.contains("걸음") || lower.contains("step") -> "4,350"
+            lower.contains("배터리") || lower.contains("battery") -> "72%"
+            lower.contains("미세먼지") || lower.contains("dust") -> "좋음 15"
+            lower.contains("강수") || lower.contains("rain") -> "10%"
+            lower.contains("자외선") || lower.contains("uv") -> "보통 5"
+            else -> "--"
+        }
+    }
+
+    /**
      * Imagen으로 위젯 배경 이미지를 생성한다.
-     * @param imageShape 사용자가 원하는 이미지 형상 설명 (예: "미니멀 원형 시계")
-     * @param infoItems  오버레이할 정보 항목 목록 (예: ["날씨", "온도", "습도"])
-     * @param aspectRatio 그린 사각형의 가로/세로 비율 (width / height)
-     * @return 생성된 이미지의 PNG 바이트 배열
+     * 슬롯 좌표를 negative space 힌트로 변환하며, 가시적 박스나 텍스트는 금지.
+     * @param imageShape 사용자의 이미지 형상 설명 (예: "미니멀 유리질감 카드")
+     * @param slots 텍스트 슬롯 목록 — 위치 힌트로 프롬프트에 반영
+     * @param aspectRatio 그린 사각형의 가로/세로 비율
      */
     suspend fun generateWidgetImage(
         imageShape: String,
-        infoItems: List<String>,
+        slots: List<AiTextSlot>,
         aspectRatio: Float,
     ): ByteArray = withContext(Dispatchers.IO) {
         if (API_KEY.isBlank() || API_KEY == "YOUR_GEMINI_API_KEY") {
             throw LlmException("Gemini API 키가 설정되지 않았습니다. GeminiClient.API_KEY를 채워주세요.")
         }
-        val aspectStr = closestImagenAspectRatio(aspectRatio)
-        val infoText = infoItems.joinToString(", ")
-        val prompt = buildString {
-            append(imageShape.trim())
-            append(" style widget for a smartphone lock screen. ")
-            append("Transparent PNG background (alpha channel, no solid fill). ")
-            append("Includes ${infoItems.size} clearly outlined empty placeholder zones for: $infoText. ")
-            append("Each zone is a blank, framed area — text will be overlaid separately. ")
-            append("Minimalist, modern aesthetic. No actual text rendered inside image.")
-        }
+        val prompt = buildImagenPrompt(imageShape, slots)
         val bodyJson = JSONObject().apply {
             put("instances", JSONArray().put(JSONObject().put("prompt", prompt)))
             put("parameters", JSONObject().apply {
                 put("sampleCount", 1)
-                put("aspectRatio", aspectStr)
+                put("aspectRatio", closestImagenAspectRatio(aspectRatio))
             })
         }.toString()
         val request = Request.Builder()
@@ -169,6 +227,33 @@ object GeminiClient {
             .post(bodyJson.toRequestBody(jsonMedia))
             .build()
         callImagenWithRetry(request)
+    }
+
+    private fun buildImagenPrompt(imageShape: String, slots: List<AiTextSlot>): String {
+        val spaceHints = slots.joinToString(". ") { s ->
+            val x1 = (s.xRatio * 100).toInt()
+            val y1 = (s.yRatio * 100).toInt()
+            val x2 = ((s.xRatio + s.widthRatio) * 100).toInt()
+            val y2 = ((s.yRatio + s.heightRatio) * 100).toInt()
+            val roleDesc = when (s.role) {
+                "title" -> "small label zone"
+                "main" -> "primary display zone"
+                "sub" -> "secondary info zone"
+                else -> "detail zone"
+            }
+            "Keep a visually calm $roleDesc from ($x1%,$y1%) to ($x2%,$y2%)"
+        }
+        return buildString {
+            append(imageShape.trim())
+            append(" style widget skin for a smartphone lock screen. ")
+            if (spaceHints.isNotBlank()) append("$spaceHints. ")
+            append("Do NOT draw visible boxes, frames, input fields, placeholder rectangles, or UI chrome. ")
+            append("Do NOT render any letters, numbers, symbols, fake text, labels, or watermarks anywhere. ")
+            append("Keep text zones visually calm with low visual complexity — ")
+            append("decoration and detail only in non-text areas. ")
+            append("Transparent or frosted/glassmorphism background. ")
+            append("High quality, elegant, minimalist lock screen widget illustration.")
+        }
     }
 
     private fun callImagenWithRetry(request: Request): ByteArray {

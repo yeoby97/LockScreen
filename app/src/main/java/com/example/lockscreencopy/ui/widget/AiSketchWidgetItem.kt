@@ -5,13 +5,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,9 +26,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -35,8 +38,15 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.lockscreencopy.model.AiSketchWidget
-import java.util.Calendar
+import com.example.lockscreencopy.model.AiTextSlot
 import kotlin.math.roundToInt
+
+private val CornerShape = RoundedCornerShape(16.dp)
+private val textShadow = Shadow(
+    color = Color.Black.copy(alpha = 0.55f),
+    offset = Offset(0f, 1f),
+    blurRadius = 4f,
+)
 
 @Composable
 fun AiSketchWidgetItem(
@@ -51,12 +61,12 @@ fun AiSketchWidgetItem(
     val widthDp = (widget.widthDp * widget.scaleX).dp
     val heightDp = (widget.heightDp * widget.scaleY).dp
 
+    // Outer Box — 인터랙션 + 삭제/리사이즈 담당. clip 없음 → X 버튼 잘리지 않음.
     Box(
         modifier = Modifier
             .offset { IntOffset(widget.offset.x.roundToInt(), widget.offset.y.roundToInt()) }
             .width(widthDp)
             .height(heightDp)
-            .clip(RoundedCornerShape(16.dp))
             .pointerInput(isFloating, widget.uid) {
                 if (isFloating) detectTapGestures(onTap = { onSelectToggle() })
             }
@@ -66,117 +76,118 @@ fun AiSketchWidgetItem(
                 }
             },
     ) {
-        // 배경: AI 생성 이미지 or 기본 반투명 배경
-        if (widget.imageBitmap != null) {
-            Image(
-                bitmap = widget.imageBitmap.asImageBitmap(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-            // 텍스트 가독성을 위한 반투명 오버레이
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.25f)),
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0xFF1C1C2E).copy(alpha = 0.82f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Filled.AutoAwesome,
-                    contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.3f),
-                    modifier = Modifier.size(32.dp),
-                )
-            }
-        }
-
-        // 정보 텍스트 오버레이
-        InfoTextOverlay(
-            items = widget.infoItems,
+        // Inner Box — 이미지 + 슬롯 텍스트. 여기서만 clip 적용.
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-        )
+                .clip(CornerShape),
+        ) {
+            if (widget.imageBitmap != null) {
+                Image(
+                    bitmap = widget.imageBitmap.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                // 텍스트 가독성 보조 dim
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.18f)),
+                )
+            } else {
+                // 이미지 없을 때 기본 배경
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFF1C1C2E).copy(alpha = 0.85f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.AutoAwesome,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.22f),
+                        modifier = Modifier.size(38.dp),
+                    )
+                }
+            }
 
-        // 편집 모드 테두리
+            // 슬롯 기반 텍스트 오버레이
+            SlotTextOverlay(slots = widget.textSlots)
+        }
+
+        // 편집 모드 테두리 — clip 바깥에서 그려야 완전히 보임
         if (isFloating) {
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(16.dp)),
+                    .border(1.dp, Color.White.copy(alpha = 0.65f), CornerShape),
             )
         }
 
         if (isFloating && isSelected) ResizeHandles(onResize)
-
         if (isFloating) DeleteBadge(onClick = onDelete)
     }
 }
 
+/**
+ * 슬롯 좌표(0.0~1.0 비율)를 `BoxWithConstraints`로 실제 dp 로 변환해 텍스트를 배치.
+ * 이미지 생성 프롬프트의 negative space 위치와 1:1 대응하도록 설계됨.
+ */
 @Composable
-private fun InfoTextOverlay(items: List<String>, modifier: Modifier = Modifier) {
-    if (items.isEmpty()) return
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        val spacing = if (items.size > 2) 4.dp else 8.dp
-        Spacer(modifier = Modifier.weight(1f))
-        items.forEach { item ->
-            val label = item.trim()
-            val value = sampleValueForInfo(label)
-            Text(
-                text = value,
-                color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = label,
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Normal,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(modifier = Modifier.height(spacing))
+private fun SlotTextOverlay(slots: List<AiTextSlot>) {
+    if (slots.isEmpty()) return
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        slots.forEach { slot ->
+            val x = maxWidth * slot.xRatio
+            val y = maxHeight * slot.yRatio
+            val w = maxWidth * slot.widthRatio
+            val h = maxHeight * slot.heightRatio
+            val baseSp = 14f
+
+            Box(
+                modifier = Modifier
+                    .offset(x = x, y = y)
+                    .width(w)
+                    .height(h),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    val valueFontSize = (baseSp * slot.fontScale).sp
+                    val labelFontSize = (baseSp * 0.68f * slot.fontScale).sp
+                    val valueFontWeight = when (slot.role) {
+                        "main" -> FontWeight.Bold
+                        else -> FontWeight.SemiBold
+                    }
+
+                    Text(
+                        text = slot.value,
+                        color = Color.White,
+                        fontSize = valueFontSize,
+                        fontWeight = valueFontWeight,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = TextStyle(shadow = textShadow),
+                    )
+                    if (slot.label.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(1.dp))
+                        Text(
+                            text = slot.label,
+                            color = Color.White.copy(alpha = 0.68f),
+                            fontSize = labelFontSize,
+                            fontWeight = FontWeight.Normal,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = TextStyle(shadow = textShadow),
+                        )
+                    }
+                }
+            }
         }
     }
 }
-
-private fun sampleValueForInfo(item: String): String {
-    val lower = item.lowercase()
-    return when {
-        lower.contains("날씨") || lower.contains("weather") -> "맑음"
-        lower.contains("온도") || lower.contains("기온") || lower.contains("temp") -> "23°C"
-        lower.contains("습도") || lower.contains("humidity") -> "45%"
-        lower.contains("시간") || lower.contains("time") -> {
-            val cal = Calendar.getInstance()
-            "%d:%02d".format(cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE))
-        }
-        lower.contains("날짜") || lower.contains("date") -> {
-            val cal = Calendar.getInstance()
-            "${cal.get(Calendar.MONTH) + 1}월 ${cal.get(Calendar.DAY_OF_MONTH)}일"
-        }
-        lower.contains("걸음") || lower.contains("step") -> "4,350"
-        lower.contains("배터리") || lower.contains("battery") -> "72%"
-        lower.contains("미세먼지") || lower.contains("dust") -> "좋음 15"
-        lower.contains("자외선") || lower.contains("uv") -> "보통 5"
-        lower.contains("강수") || lower.contains("rain") -> "10%"
-        lower.contains("일출") || lower.contains("sunrise") -> "06:12"
-        lower.contains("일몰") || lower.contains("sunset") -> "19:48"
-        lower.contains("캘린더") || lower.contains("일정") || lower.contains("calendar") -> "일정 없음"
-        else -> "--"
-    }
-}
-
