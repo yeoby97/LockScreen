@@ -25,6 +25,19 @@ object NotificationRepository {
     fun add(item: NotificationItem) =
         _notifications.update { current -> listOf(item) + current.filterNot { it.id == item.id } }
 
+    /** 기존 항목의 넛지 결과만 제자리에서 갱신한다(순서 유지). 온디바이스 AI 재분석 결과 반영용. */
+    fun updateNudge(id: String, result: NudgeResult) =
+        _notifications.update { current ->
+            current.map { item ->
+                if (item.id != id) item
+                else item.copy(
+                    hasNudge = result.hasNudge,
+                    nudgeLabel = result.nudgeLabel,
+                    nudgeActions = result.actions,
+                )
+            }
+        }
+
     fun remove(id: String) =
         _notifications.update { current -> current.filterNot { it.id == id } }
 

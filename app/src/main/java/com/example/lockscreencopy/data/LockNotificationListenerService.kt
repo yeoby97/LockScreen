@@ -5,8 +5,15 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.example.lockscreencopy.model.NotificationItem
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 class LockNotificationListenerService : NotificationListenerService() {
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onListenerConnected() {
         val items = try {
@@ -15,15 +22,37 @@ class LockNotificationListenerService : NotificationListenerService() {
             emptyList()
         }
         NotificationRepository.reset(items)
+        // 한국어 엔티티 추출 모델을 미리 내려받아 첫 추론 지연을 줄인다.
+        scope.launch { NudgeAnalyzer.warmUp() }
+        items.forEach { refineNudge(it) }
     }
 
     override fun onListenerDisconnected() {
         NotificationRepository.reset(emptyList())
     }
 
+    override fun onDestroy() {
+        scope.cancel()
+        super.onDestroy()
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val item = sbn.toItem() ?: return
         NotificationRepository.add(item)
+        refineNudge(item)
+    }
+
+    /** 정규식으로 즉시 표시한 넛지를 온디바이스 AI로 재분석해 결과가 바뀌면 갱신한다. */
+    private fun refineNudge(item: NotificationItem) {
+        scope.launch {
+            val refined = NudgeAnalyzer.analyze(item.title, item.body)
+            if (refined.hasNudge != item.hasNudge ||
+                refined.nudgeLabel != item.nudgeLabel ||
+                refined.actions != item.nudgeActions
+            ) {
+                NotificationRepository.updateNudge(item.id, refined)
+            }
+        }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {

@@ -29,12 +29,12 @@ data class NudgeResult(
     val actions: List<String>,
 )
 
-fun detectNudge(title: String, body: String): NudgeResult {
-    val text = "$title $body"
-    val hasDate = DATE_PATTERNS.any { it.containsMatchIn(text) }
-    val hasTime = TIME_PATTERNS.any { it.containsMatchIn(text) }
-    val hasPlace = PLACE_PATTERN.containsMatchIn(text)
-    return when {
+/**
+ * 날짜/시간/장소 신호 조합을 넛지 액션으로 변환하는 공통 결정 로직.
+ * 정규식 기반 [detectNudge] 와 온디바이스 AI 기반 [NudgeAnalyzer] 가 함께 사용한다.
+ */
+internal fun resolveNudge(hasDate: Boolean, hasTime: Boolean, hasPlace: Boolean): NudgeResult =
+    when {
         hasDate && (hasTime || hasPlace) -> NudgeResult(
             hasNudge = true,
             nudgeLabel = "일정 추가",
@@ -50,4 +50,15 @@ fun detectNudge(title: String, body: String): NudgeResult {
         )
         else -> NudgeResult(hasNudge = false, nudgeLabel = "", actions = emptyList())
     }
+
+/**
+ * 정규식 기반 즉시 탐지. 알림 도착 즉시 호출되어 첫 화면을 그리며,
+ * 온디바이스 모델이 아직 준비되지 않았을 때의 폴백으로도 쓰인다.
+ */
+fun detectNudge(title: String, body: String): NudgeResult {
+    val text = "$title $body"
+    val hasDate = DATE_PATTERNS.any { it.containsMatchIn(text) }
+    val hasTime = TIME_PATTERNS.any { it.containsMatchIn(text) }
+    val hasPlace = PLACE_PATTERN.containsMatchIn(text)
+    return resolveNudge(hasDate, hasTime, hasPlace)
 }
