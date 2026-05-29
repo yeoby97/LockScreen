@@ -125,3 +125,14 @@ data class AiSketchWidget(
     val scaleX: Float = 1f,
     val scaleY: Float = 1f,
 )
+
+data class NotificationItem(
+    val id: String,
+    val appName: String,
+    val title: String,
+    val body: String,
+    val timeLabel: String,
+    val hasNudge: Boolean = false,
+    val nudgeLabel: String = "",
+    val nudgeActions: List<String> = emptyList(),
+)

@@ -23,17 +23,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material3.Button
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
@@ -42,6 +47,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -63,6 +71,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.lockscreencopy.R
 import com.example.lockscreencopy.model.AddTarget
 import com.example.lockscreencopy.model.BottomShortcut
@@ -78,9 +87,15 @@ import com.example.lockscreencopy.data.hasUsageStatsPermission
 import com.example.lockscreencopy.data.launchAppShortcut
 import com.example.lockscreencopy.data.loadInstalledApps
 import com.example.lockscreencopy.data.loadWeeklyUsage
+import com.example.lockscreencopy.data.NotificationRepository
+import com.example.lockscreencopy.data.isNotificationListenerEnabled
+import com.example.lockscreencopy.data.openNotificationListenerSettings
 import com.example.lockscreencopy.data.openUsageAccessSettings
+import com.example.lockscreencopy.data.sampleNotifications
 import com.example.lockscreencopy.data.topUsedAppsWithGap
 import com.example.lockscreencopy.model.AiSketchWidget
+import com.example.lockscreencopy.ui.notification.NotificationPermissionBanner
+import com.example.lockscreencopy.ui.notification.NudgeNotificationDisplay
 import com.example.lockscreencopy.ui.llm.GhostInstance
 import com.example.lockscreencopy.ui.llm.LlmAppStrip
 import com.example.lockscreencopy.ui.llm.LlmRealWidgetGhost
@@ -143,6 +158,23 @@ fun LockScreen(
     var showShortcutPopup by remember { mutableStateOf(false) }
     var showLockWidgetPicker by remember { mutableStateOf(false) }
     var showRealWidgetPicker by remember { mutableStateOf(false) }
+
+    val realNotifications by NotificationRepository.notifications.collectAsState()
+    val dummyNotifications = remember { sampleNotifications() }
+    var useDummyNotifications by remember { mutableStateOf(false) }
+    val notifications = if (useDummyNotifications) dummyNotifications else realNotifications
+
+    var hasNotificationPermission by remember { mutableStateOf(isNotificationListenerEnabled(context)) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val obs = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasNotificationPermission = isNotificationListenerEnabled(context)
+            }
+        }
+        lifecycle.addObserver(obs)
+        onDispose { lifecycle.removeObserver(obs) }
+    }
 
     var favoriteApps by remember { mutableStateOf(listOf<BottomShortcut>()) }
     var favoriteAppsEnabled by remember { mutableStateOf(true) }
@@ -522,7 +554,7 @@ fun LockScreen(
             Column(
                 modifier = Modifier.fillMaxSize().padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.Top,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     EditModeTopBar(
@@ -611,24 +643,38 @@ fun LockScreen(
 
                 }
 
-                if (isFloating) {
-                    Box(
-                        modifier = Modifier
-                            .onGloballyPositioned { bottomBarCoords = it }
-                            .graphicsLayer { alpha = editAlpha }
-                            .padding(bottom = screenHeight * 0.05f)
-                            .offset { IntOffset(greenBoxOffset.x.roundToInt(), greenBoxOffset.y.roundToInt()) }
-                            .pointerInput(isFloating) {
-                                detectDragGestures { c, d -> c.consume(); greenBoxOffset += d }
-                            }
-                            .pointerInput(isFloating) {
-                                detectTapGestures(onTap = { showShortcutPopup = true })
-                            }
-                            .clip(RoundedCornerShape(30.dp))
-                            .border(2.dp, Color.LightGray, RoundedCornerShape(30.dp)),
-                    ) {
-                        LockStarBar()
-                    }
+                Spacer(modifier = Modifier.height(12.dp))
+                if (!hasNotificationPermission) {
+                    NotificationPermissionBanner(
+                        onOpenSettings = { openNotificationListenerSettings(context) },
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                    )
+                } else {
+                    NudgeNotificationDisplay(
+                        notifications = notifications,
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                    )
+                }
+            }
+
+            if (isFloating) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .onGloballyPositioned { bottomBarCoords = it }
+                        .graphicsLayer { alpha = editAlpha }
+                        .padding(bottom = screenHeight * 0.05f)
+                        .offset { IntOffset(greenBoxOffset.x.roundToInt(), greenBoxOffset.y.roundToInt()) }
+                        .pointerInput(isFloating) {
+                            detectDragGestures { c, d -> c.consume(); greenBoxOffset += d }
+                        }
+                        .pointerInput(isFloating) {
+                            detectTapGestures(onTap = { showShortcutPopup = true })
+                        }
+                        .clip(RoundedCornerShape(30.dp))
+                        .border(2.dp, Color.LightGray, RoundedCornerShape(30.dp)),
+                ) {
+                    LockStarBar()
                 }
             }
 
@@ -927,6 +973,17 @@ fun LockScreen(
             }
         }
 
+        if (isFloating) {
+            NotificationSourceButton(
+                useDummy = useDummyNotifications,
+                onToggle = { useDummyNotifications = !useDummyNotifications },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 24.dp, bottom = screenHeight * 0.28f)
+                    .graphicsLayer { alpha = editAlpha },
+            )
+        }
+
         if (showAiChooser) {
             AiActionPickerDialog(
                 onDismiss = { showAiChooser = false },
@@ -1096,5 +1153,46 @@ private fun EditModeTopBar(visible: Boolean, alpha: Float = 1f, onConfirm: () ->
     ) {
         Button(onClick = {}, enabled = visible) { Text("배경화면") }
         Button(onClick = onConfirm, enabled = visible) { Text("확인") }
+    }
+}
+
+@Composable
+private fun NotificationSourceButton(
+    useDummy: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val dummyOrange = Color(0xFFFF9500)
+    val liveGreen = Color(0xFF34C759)
+    val color = if (useDummy) dummyOrange else liveGreen
+    val label = if (useDummy) "더미" else "실시간"
+    val icon = if (useDummy) Icons.Filled.Science else Icons.Filled.NotificationsActive
+
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        FloatingActionButton(
+            onClick = onToggle,
+            containerColor = color,
+            contentColor = Color.White,
+            shape = CircleShape,
+            modifier = Modifier.size(48.dp),
+        ) {
+            Icon(icon, contentDescription = "알림 소스 전환")
+        }
+        Spacer(Modifier.height(4.dp))
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.Black.copy(alpha = 0.5f))
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+        ) {
+            Text(
+                text = label,
+                color = Color.White,
+                fontSize = 10.sp,
+            )
+        }
     }
 }
