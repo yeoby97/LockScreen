@@ -231,37 +231,34 @@ object GeminiClient {
     }
 
     /**
-     * 템플릿 타입에 맞는 장식 이미지 전용 생성 프롬프트를 만든다.
-     * AI는 위젯 전체 UI가 아닌, 카드 위에 올릴 장식 요소만 만든다.
-     * WEATHER/TEMP/BATTERY 같은 정보 카테고리 단어는 절대 넣지 않는다.
+     * Full Bleed 방식의 분위기/풍경 이미지 프롬프트를 생성한다.
+     * 위젯 전체를 채울 아름다운 배경 장면을 요청한다.
+     * 텍스트는 Compose 글래스 패널이 렌더링하므로 이미지에 글자가 들어가면 안 된다.
      */
     fun buildDecorationPrompt(imageShape: String, templateType: AiWidgetTemplateType): String {
-        val subject = imageShape.trim().ifBlank { "cute character" }
-        return when (templateType) {
+        val subject = imageShape.trim().ifBlank { "a dreamy landscape" }
+        val base = when (templateType) {
             AiWidgetTemplateType.STICKER ->
-                "A cute large $subject sticker, soft 3D illustration style, centered composition, " +
-                "fully transparent background, no text, no numbers, no letters, no labels, no words anywhere, " +
-                "isolated single decorative element, clean edges, high quality render"
+                "A beautiful dreamy scene featuring $subject as the central subject. " +
+                "Vibrant rich colors, soft bokeh background, cinematic lighting, " +
+                "painterly digital illustration style, fills the entire frame edge to edge."
 
             AiWidgetTemplateType.GLASS_INFO ->
-                "A small cute $subject illustration for widget decoration, right-side placement, " +
-                "fully transparent background, soft pastel colors, simple clean design, " +
-                "no text, no numbers, no letters, no labels anywhere, " +
-                "isolated decorative element, compact composition"
+                "A stunning atmospheric landscape inspired by $subject. " +
+                "Beautiful sky, depth and atmosphere, rich color palette, " +
+                "cinematic wide composition, fills the entire frame edge to edge, " +
+                "painterly illustration style."
 
             AiWidgetTemplateType.LABEL_BOARD ->
-                "A tiny cute $subject corner decoration sticker, miniature style, " +
-                "fully transparent background, minimal simple design, " +
-                "no text, no numbers, no letters, no labels anywhere, " +
-                "small isolated decorative accent element"
-        } + " CRITICAL: Do NOT render any letters, numbers, words, or symbols anywhere. " +
-            "Fully transparent PNG background. High quality polished illustration."
+                "A cozy warm illustrated scene featuring $subject. " +
+                "Soft warm lighting, gentle pastel colors, storybook illustration style, " +
+                "fills the entire frame edge to edge."
+        }
+        return "$base ABSOLUTELY NO TEXT, NO NUMBERS, NO SYMBOLS, NO LETTERS anywhere in the image."
     }
 
     /**
-     * Compose 템플릿이 텍스트 레이아웃을 전담하므로 LLM 좌표 계산이 불필요하다.
-     * infoItems를 클라이언트에서 즉시 AiTextSlot으로 변환하고,
-     * 장식 이미지 전용 프롬프트를 조합해 SketchScene으로 바로 반환한다.
+     * infoItems를 AiTextSlot으로 변환하고, Full Bleed 배경용 풍경 이미지 프롬프트를 반환한다.
      */
     suspend fun designSketchScene(
         infoItems: List<ResolvedInfoItem>,
@@ -280,10 +277,11 @@ object GeminiClient {
             )
         }
         val imagePrompt = buildString {
-            append("A cute, highly detailed single illustration of ")
-            append(imageShape.trim().ifBlank { "a charming subject" })
-            append(". Minimalist 3D icon style, solid white background, centered composition. ")
-            append("Isolated decorative element for a UI widget.")
+            append("A beautiful atmospheric scene of ")
+            append(imageShape.trim().ifBlank { "a dreamy landscape" })
+            append(". Painterly digital illustration, rich vibrant colors, ")
+            append("cinematic lighting, fills entire frame, high detail. ")
+            append("No text, no numbers, no symbols.")
         }
         SketchScene(imagePrompt, slots)
     }
@@ -334,10 +332,9 @@ object GeminiClient {
     }
 
     private const val IMAGE_SAFETY_SUFFIX =
-        " CRITICAL: Solid white or fully transparent background. Centered single object. " +
-            "Do NOT draw any landscape or complex backgrounds. " +
+        " CRITICAL: Fill the entire image frame with the scene — no empty margins, no white borders. " +
             "ABSOLUTELY NO TEXT, NO NUMBERS, NO SYMBOLS, NO WORDS anywhere in the image. " +
-            "High quality, clean edges, polished UI asset."
+            "High quality, vibrant colors, painterly illustration style."
 
     private fun callImageGenWithRetry(request: Request): ByteArray {
         var lastErr: Throwable? = null

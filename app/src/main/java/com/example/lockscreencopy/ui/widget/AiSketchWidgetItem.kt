@@ -7,13 +7,11 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,7 +19,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -48,8 +46,9 @@ import com.example.lockscreencopy.model.AiWidgetTemplateType
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-private val CardShape = RoundedCornerShape(20.dp)
-private val ChipShape = RoundedCornerShape(10.dp)
+private val WidgetShape = RoundedCornerShape(20.dp)
+private val GlassPanelShape = RoundedCornerShape(14.dp)
+private val GlassChipShape = RoundedCornerShape(10.dp)
 
 @Composable
 fun AiSketchWidgetItem(
@@ -64,7 +63,6 @@ fun AiSketchWidgetItem(
 ) {
     val widthDp = (widget.widthDp * widget.scaleX).dp
     val heightDp = (widget.heightDp * widget.scaleY).dp
-    // 리사이즈 시 텍스트/패딩 스케일 인수 (0.6~1.8 클램프)
     val scaleFactor = min(widget.scaleX, widget.scaleY).coerceIn(0.6f, 1.8f)
 
     Box(
@@ -81,22 +79,73 @@ fun AiSketchWidgetItem(
                 }
             },
     ) {
-        // 템플릿 기반 카드 렌더링
-        when (widget.templateType) {
-            AiWidgetTemplateType.GLASS_INFO ->
-                GlassInfoTemplate(widget, scaleFactor, isFloating, onSlotClick)
-            AiWidgetTemplateType.STICKER ->
-                StickerTemplate(widget, scaleFactor, isFloating, onSlotClick)
-            AiWidgetTemplateType.LABEL_BOARD ->
-                LabelBoardTemplate(widget, scaleFactor, isFloating, onSlotClick)
+        // 위젯 본체 — 둥근 모서리로 클립
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(WidgetShape),
+        ) {
+            // ① Full Bleed 배경 이미지
+            if (widget.decorationBitmap != null) {
+                Image(
+                    bitmap = widget.decorationBitmap.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                // 이미지 없을 때 그라디언트 플레이스홀더
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(Color(0xFF1A237E), Color(0xFF4A148C)),
+                            ),
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.AutoAwesome,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.25f),
+                        modifier = Modifier.size(40.dp),
+                    )
+                }
+            }
+
+            // ② 가독성을 위한 하단 그라디언트 스크림
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colorStops = arrayOf(
+                                0.0f to Color.Transparent,
+                                0.45f to Color.Transparent,
+                                1.0f to Color.Black.copy(alpha = 0.55f),
+                            ),
+                        ),
+                    ),
+            )
+
+            // ③ 글래스 텍스트 패널 (템플릿별 레이아웃)
+            when (widget.templateType) {
+                AiWidgetTemplateType.GLASS_INFO ->
+                    GlassInfoOverlay(widget.textSlots, scaleFactor, isFloating, onSlotClick)
+                AiWidgetTemplateType.STICKER ->
+                    StickerOverlay(widget.textSlots, scaleFactor, isFloating, onSlotClick)
+                AiWidgetTemplateType.LABEL_BOARD ->
+                    LabelBoardOverlay(widget.textSlots, scaleFactor, isFloating, onSlotClick)
+            }
         }
 
-        // 편집 모드 테두리
+        // 편집 모드 테두리 (clip 바깥에서 그려야 완전히 보임)
         if (isFloating) {
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .border(1.dp, Color.White.copy(alpha = 0.65f), CardShape),
+                    .border(1.dp, Color.White.copy(alpha = 0.65f), WidgetShape),
             )
         }
 
@@ -106,52 +155,37 @@ fun AiSketchWidgetItem(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GLASS_INFO: 반투명 글래스 카드. 왼쪽에 정보, 오른쪽에 장식 이미지.
+// GLASS_INFO: 하단 왼쪽 큰 정보 + 오른쪽 작은 칩들
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
-private fun GlassInfoTemplate(
-    widget: AiSketchWidget,
+private fun GlassInfoOverlay(
+    slots: List<AiTextSlot>,
     scaleFactor: Float,
     isFloating: Boolean,
     onSlotClick: ((AiTextSlot) -> Unit)?,
 ) {
-    val slots = widget.textSlots
     val mainSlot = slots.firstOrNull { it.role == "main" } ?: slots.firstOrNull()
     val subSlots = slots.filter { it != mainSlot }.take(3)
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .clip(CardShape)
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(
-                        Color(0xFF1A2A4A).copy(alpha = 0.82f),
-                        Color(0xFF0D1B2E).copy(alpha = 0.90f),
-                    ),
-                ),
-            ),
+            .padding((10 * scaleFactor).dp),
+        contentAlignment = Alignment.BottomStart,
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = (12 * scaleFactor).dp, vertical = (10 * scaleFactor).dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy((8 * scaleFactor).dp),
         ) {
-            // 왼쪽: 정보 영역
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight(),
-                verticalArrangement = Arrangement.SpaceEvenly,
-            ) {
-                if (mainSlot != null) {
-                    SlotClickableBox(slot = mainSlot, isFloating = isFloating, onSlotClick = onSlotClick) {
+            // 왼쪽: 메인 정보 글래스 패널
+            if (mainSlot != null) {
+                SlotClickBox(slot = mainSlot, isFloating = isFloating, onSlotClick = onSlotClick) {
+                    GlassPanel(modifier = Modifier.wrapContentSize()) {
                         Column {
                             Text(
                                 text = mainSlot.value,
                                 color = Color.White,
-                                fontSize = (22f * scaleFactor).sp,
+                                fontSize = (24f * scaleFactor).sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -159,117 +193,78 @@ private fun GlassInfoTemplate(
                             if (mainSlot.label.isNotBlank()) {
                                 Text(
                                     text = mainSlot.label,
-                                    color = Color.White.copy(alpha = 0.65f),
+                                    color = Color.White.copy(alpha = 0.72f),
                                     fontSize = (11f * scaleFactor).sp,
-                                    fontWeight = FontWeight.Normal,
                                     maxLines = 1,
                                 )
                             }
                         }
                     }
                 }
+            }
 
-                if (subSlots.isNotEmpty()) {
-                    Spacer(Modifier.height((4 * scaleFactor).dp))
-                    Column(verticalArrangement = Arrangement.spacedBy((4 * scaleFactor).dp)) {
-                        subSlots.forEach { slot ->
-                            SlotClickableBox(slot = slot, isFloating = isFloating, onSlotClick = onSlotClick) {
-                                InfoChip(slot = slot, scaleFactor = scaleFactor)
-                            }
+            // 오른쪽: 서브 정보 칩들 (세로 스택)
+            if (subSlots.isNotEmpty()) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy((4 * scaleFactor).dp),
+                    horizontalAlignment = Alignment.End,
+                ) {
+                    subSlots.forEach { slot ->
+                        SlotClickBox(slot = slot, isFloating = isFloating, onSlotClick = onSlotClick) {
+                            GlassChip(slot = slot, scaleFactor = scaleFactor)
                         }
                     }
                 }
-            }
-
-            // 오른쪽: 장식 이미지
-            if (widget.decorationBitmap != null) {
-                Spacer(Modifier.width((8 * scaleFactor).dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .width((70 * scaleFactor).dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Image(
-                        bitmap = widget.decorationBitmap.asImageBitmap(),
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-            } else {
-                DecorationPlaceholder(size = (56 * scaleFactor).dp)
             }
         }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STICKER: 장식 이미지를 상단 중앙에 크게. 텍스트는 하단 칩 행.
+// STICKER: 하단 전체 너비 글래스 바 (칩 가로 나열)
 // ─────────────────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun StickerTemplate(
-    widget: AiSketchWidget,
+private fun StickerOverlay(
+    slots: List<AiTextSlot>,
     scaleFactor: Float,
     isFloating: Boolean,
     onSlotClick: ((AiTextSlot) -> Unit)?,
 ) {
-    val slots = widget.textSlots
+    if (slots.isEmpty()) return
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .clip(CardShape)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFF2C2C54).copy(alpha = 0.88f),
-                        Color(0xFF1A1A3E).copy(alpha = 0.95f),
-                    ),
-                ),
-            ),
+            .padding(horizontal = (10 * scaleFactor).dp, vertical = (10 * scaleFactor).dp),
+        contentAlignment = Alignment.BottomCenter,
     ) {
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val totalH = maxHeight
-            val chipAreaH = if (slots.isNotEmpty()) (48 * scaleFactor).dp else 0.dp
-            val decoAreaH = totalH - chipAreaH - (8 * scaleFactor).dp
-
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
+        GlassPanel(modifier = Modifier.fillMaxWidth()) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(
+                    (8 * scaleFactor).dp,
+                    Alignment.CenterHorizontally,
+                ),
+                verticalArrangement = Arrangement.spacedBy((4 * scaleFactor).dp),
             ) {
-                // 상단: 장식 이미지
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(decoAreaH),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (widget.decorationBitmap != null) {
-                        Image(
-                            bitmap = widget.decorationBitmap.asImageBitmap(),
-                            contentDescription = null,
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier.fillMaxSize().padding((8 * scaleFactor).dp),
-                        )
-                    } else {
-                        DecorationPlaceholder(size = (72 * scaleFactor).dp)
-                    }
-                }
-
-                // 하단: 정보 칩 행
-                if (slots.isNotEmpty()) {
-                    FlowRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = (8 * scaleFactor).dp, vertical = (4 * scaleFactor).dp),
-                        horizontalArrangement = Arrangement.spacedBy((4 * scaleFactor).dp, Alignment.CenterHorizontally),
-                        verticalArrangement = Arrangement.spacedBy((4 * scaleFactor).dp),
-                    ) {
-                        slots.forEach { slot ->
-                            SlotClickableBox(slot = slot, isFloating = isFloating, onSlotClick = onSlotClick) {
-                                InfoChip(slot = slot, scaleFactor = scaleFactor)
+                slots.forEach { slot ->
+                    SlotClickBox(slot = slot, isFloating = isFloating, onSlotClick = onSlotClick) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = slot.value,
+                                color = Color.White,
+                                fontSize = (15f * scaleFactor).sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                            )
+                            if (slot.label.isNotBlank()) {
+                                Text(
+                                    text = slot.label,
+                                    color = Color.White.copy(alpha = 0.65f),
+                                    fontSize = (10f * scaleFactor).sp,
+                                    maxLines = 1,
+                                )
                             }
                         }
                     }
@@ -280,66 +275,48 @@ private fun StickerTemplate(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LABEL_BOARD: 메모장/표지판 형태. 텍스트가 주인공, 장식은 상단 우측 모서리.
+// LABEL_BOARD: 하단 글래스 패널에 레이블:값 목록
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
-private fun LabelBoardTemplate(
-    widget: AiSketchWidget,
+private fun LabelBoardOverlay(
+    slots: List<AiTextSlot>,
     scaleFactor: Float,
     isFloating: Boolean,
     onSlotClick: ((AiTextSlot) -> Unit)?,
 ) {
-    val slots = widget.textSlots
+    if (slots.isEmpty()) return
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .clip(CardShape)
-            .background(Color(0xFFFFF8EE).copy(alpha = 0.92f)),
+            .padding((10 * scaleFactor).dp),
+        contentAlignment = Alignment.BottomStart,
     ) {
-        // 헤더 라인 상단
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height((3 * scaleFactor).dp)
-                .background(Color(0xFFE8A857).copy(alpha = 0.85f)),
-        )
-
-        // 우상단 모서리 장식 이미지
-        if (widget.decorationBitmap != null) {
-            Image(
-                bitmap = widget.decorationBitmap.asImageBitmap(),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .size((48 * scaleFactor).dp)
-                    .padding(top = (6 * scaleFactor).dp, end = (6 * scaleFactor).dp),
-            )
-        }
-
-        // 정보 목록
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(
-                    start = (12 * scaleFactor).dp,
-                    end = if (widget.decorationBitmap != null) (52 * scaleFactor).dp else (12 * scaleFactor).dp,
-                    top = (10 * scaleFactor).dp,
-                    bottom = (10 * scaleFactor).dp,
-                ),
-            verticalArrangement = Arrangement.spacedBy((6 * scaleFactor).dp),
-        ) {
-            if (slots.isEmpty()) {
-                Text(
-                    text = "정보 없음",
-                    color = Color(0xFF5A4A3A).copy(alpha = 0.5f),
-                    fontSize = (12f * scaleFactor).sp,
-                )
-            } else {
+        GlassPanel(modifier = Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy((5 * scaleFactor).dp)) {
                 slots.forEach { slot ->
-                    SlotClickableBox(slot = slot, isFloating = isFloating, onSlotClick = onSlotClick) {
-                        LabelBoardRow(slot = slot, scaleFactor = scaleFactor)
+                    SlotClickBox(slot = slot, isFloating = isFloating, onSlotClick = onSlotClick) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (slot.label.isNotBlank()) {
+                                Text(
+                                    text = slot.label,
+                                    color = Color.White.copy(alpha = 0.65f),
+                                    fontSize = (11f * scaleFactor).sp,
+                                    modifier = Modifier.width((56 * scaleFactor).dp),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Spacer(Modifier.width((4 * scaleFactor).dp))
+                            }
+                            Text(
+                                text = slot.value,
+                                color = Color.White,
+                                fontSize = (13f * scaleFactor).sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
             }
@@ -348,26 +325,47 @@ private fun LabelBoardTemplate(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 공통 컴포넌트
+// 공통 글래스 컴포넌트
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * 글래스모피즘 패널.
+ * Full Bleed 배경 이미지 위에 반투명 레이어를 올리면 배경이 비쳐 frosted glass처럼 보인다.
+ * Compose의 BlurEffect는 자신의 콘텐츠만 흐리게 하므로 진짜 backdrop blur 대신
+ * 반투명(white 18%) + 밝은 테두리 조합으로 글래스 느낌을 낸다.
+ */
 @Composable
-private fun InfoChip(slot: AiTextSlot, scaleFactor: Float) {
+private fun GlassPanel(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .clip(GlassPanelShape)
+            .background(Color.White.copy(alpha = 0.18f))
+            .border(1.dp, Color.White.copy(alpha = 0.40f), GlassPanelShape)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun GlassChip(slot: AiTextSlot, scaleFactor: Float) {
     Box(
         modifier = Modifier
-            .clip(ChipShape)
-            .background(Color.White.copy(alpha = 0.15f))
+            .clip(GlassChipShape)
+            .background(Color.White.copy(alpha = 0.18f))
+            .border(1.dp, Color.White.copy(alpha = 0.30f), GlassChipShape)
             .padding(horizontal = (8 * scaleFactor).dp, vertical = (3 * scaleFactor).dp),
-        contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = slot.value,
                 color = Color.White,
-                fontSize = (13f * scaleFactor).sp,
+                fontSize = (12f * scaleFactor).sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
             if (slot.label.isNotBlank()) {
                 Text(
@@ -382,67 +380,19 @@ private fun InfoChip(slot: AiTextSlot, scaleFactor: Float) {
 }
 
 @Composable
-private fun LabelBoardRow(slot: AiTextSlot, scaleFactor: Float) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().wrapContentHeight(),
-    ) {
-        if (slot.label.isNotBlank()) {
-            Text(
-                text = slot.label,
-                color = Color(0xFF7A6A5A),
-                fontSize = (11f * scaleFactor).sp,
-                fontWeight = FontWeight.Normal,
-                modifier = Modifier.width((52 * scaleFactor).dp),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = ":",
-                color = Color(0xFF7A6A5A).copy(alpha = 0.6f),
-                fontSize = (11f * scaleFactor).sp,
-                modifier = Modifier.padding(end = (4 * scaleFactor).dp),
-            )
-        }
-        Text(
-            text = slot.value,
-            color = Color(0xFF2A1A0A),
-            fontSize = (13f * scaleFactor).sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
-private fun DecorationPlaceholder(size: androidx.compose.ui.unit.Dp) {
-    Icon(
-        Icons.Filled.AutoAwesome,
-        contentDescription = null,
-        tint = Color.White.copy(alpha = 0.20f),
-        modifier = Modifier.size(size),
-    )
-}
-
-/** 슬롯 클릭 가능 영역 래퍼. isFloating일 때(편집 모드)는 클릭 비활성화. */
-@Composable
-private fun SlotClickableBox(
+private fun SlotClickBox(
     slot: AiTextSlot,
     isFloating: Boolean,
     onSlotClick: ((AiTextSlot) -> Unit)?,
     content: @Composable () -> Unit,
 ) {
     Box(
-        modifier = Modifier
-            .then(
-                if (!isFloating && onSlotClick != null) {
-                    Modifier.pointerInput(slot.label) {
-                        detectTapGestures { onSlotClick(slot) }
-                    }
-                } else Modifier,
-            ),
-    ) {
-        content()
-    }
+        modifier = Modifier.then(
+            if (!isFloating && onSlotClick != null) {
+                Modifier.pointerInput(slot.label) {
+                    detectTapGestures { onSlotClick(slot) }
+                }
+            } else Modifier,
+        ),
+    ) { content() }
 }
