@@ -3,6 +3,7 @@ package com.example.lockscreencopy.data
 import android.app.Notification
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import android.util.Log
 import com.example.lockscreencopy.model.NotificationItem
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
@@ -13,9 +14,14 @@ import kotlinx.coroutines.launch
 
 class LockNotificationListenerService : NotificationListenerService() {
 
+    private companion object {
+        const val TAG = "NudgeAnalyzer"
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onListenerConnected() {
+        Log.i(TAG, "리스너 연결됨. API 키 설정=${NudgeAnalyzer.hasApiKey()}")
         val items = try {
             activeNotifications.mapNotNull { it.toItem() }
         } catch (_: Exception) {
@@ -26,6 +32,7 @@ class LockNotificationListenerService : NotificationListenerService() {
     }
 
     override fun onListenerDisconnected() {
+        Log.i(TAG, "리스너 연결 해제됨")
         NotificationRepository.reset(emptyList())
     }
 
@@ -35,7 +42,12 @@ class LockNotificationListenerService : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        val item = sbn.toItem() ?: return
+        val item = sbn.toItem()
+        if (item == null) {
+            Log.d(TAG, "알림 무시(시스템/진행중/비밀/제목없음): ${sbn.packageName}")
+            return
+        }
+        Log.i(TAG, "알림 수신: app='${item.appName}' title='${item.title}' body='${item.body}'")
         NotificationRepository.add(item)
         refineNudge(item)
     }
@@ -46,7 +58,10 @@ class LockNotificationListenerService : NotificationListenerService() {
      * 메시지만 실제 분석(API 호출) 대상으로 삼는다.
      */
     private fun refineNudge(item: NotificationItem) {
-        if (!NudgeAnalyzer.isCandidate(item.title, item.body)) return
+        if (!NudgeAnalyzer.isCandidate(item.title, item.body)) {
+            Log.d(TAG, "1차 필터 제외(너무 짧음): title='${item.title}' body='${item.body}'")
+            return
+        }
         scope.launch {
             val refined = NudgeAnalyzer.analyze(item.title, item.body)
             if (refined.hasNudge != item.hasNudge ||
@@ -54,7 +69,10 @@ class LockNotificationListenerService : NotificationListenerService() {
                 refined.actions != item.nudgeActions ||
                 refined.mapQuery != item.mapQuery
             ) {
+                Log.i(TAG, "넛지 갱신: id=${item.id} hasNudge=${refined.hasNudge} label='${refined.nudgeLabel}' actions=${refined.actions} mapQuery='${refined.mapQuery}'")
                 NotificationRepository.updateNudge(item.id, refined)
+            } else {
+                Log.d(TAG, "넛지 변경 없음: id=${item.id} (hasNudge=${refined.hasNudge})")
             }
         }
     }

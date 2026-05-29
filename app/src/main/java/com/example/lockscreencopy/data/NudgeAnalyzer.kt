@@ -58,6 +58,9 @@ object NudgeAnalyzer {
 
     private val apiKey: String get() = BuildConfig.GEMINI_API_KEY
 
+    /** API 키 설정 여부. (키워드/길이와 무관하게 키 상태만 확인) */
+    fun hasApiKey(): Boolean = apiKey.isNotBlank()
+
     private val systemPrompt = """
         당신은 잠금화면 알림 도우미입니다. 단체 채팅방처럼 잡담이 많은 대화 속에서
         사용자가 실제 행동으로 옮길 만한 '중요한' 메시지만 골라내는 역할입니다.
@@ -86,9 +89,9 @@ object NudgeAnalyzer {
     /**
      * 비용/배터리를 아끼기 위한 값싼 1차 필터. 명백히 분석할 가치가 없는
      * 초단문/빈 메시지는 LLM 호출 없이 걸러낸다. (키워드에 의존하지 않는다.)
+     * 키 유무는 여기서 보지 않는다 — 키가 없을 때도 [analyze]가 로그를 남기도록 하기 위함.
      */
     fun isCandidate(title: String, body: String): Boolean {
-        if (apiKey.isBlank()) return false
         val text = "$title $body".trim()
         return text.length >= 5
     }
@@ -98,12 +101,14 @@ object NudgeAnalyzer {
      * 넛지를 표시하지 않는다([NudgeResult.NONE]) — 정규식 폴백은 사용하지 않는다.
      */
     suspend fun analyze(title: String, body: String): NudgeResult {
+        Log.i(TAG, "분석 시작: title='$title' body='$body' (apiKey 길이=${apiKey.length})")
         if (apiKey.isBlank()) {
-            Log.w(TAG, "GEMINI_API_KEY 미설정 — AI 분석을 건너뛴다(넛지 없음)")
+            Log.w(TAG, "GEMINI_API_KEY 미설정 — local.properties에 GEMINI_API_KEY를 넣고 다시 빌드하세요. (넛지 없음)")
             return NudgeResult.NONE
         }
         return withContext(Dispatchers.IO) {
             runCatching { requestGemini(title, body) }
+                .onSuccess { Log.i(TAG, "분석 결과: $it") }
                 .getOrElse {
                     Log.w(TAG, "Gemini 분석 실패, 넛지 없음으로 처리", it)
                     NudgeResult.NONE
@@ -129,8 +134,10 @@ object NudgeAnalyzer {
             .post(payload.toString().toRequestBody(JSON))
             .build()
 
+        Log.i(TAG, "Gemini 호출 → $MODEL")
         client.newCall(request).execute().use { response ->
             val bodyStr = response.body?.string().orEmpty()
+            Log.i(TAG, "Gemini 응답 HTTP ${response.code}: $bodyStr")
             if (!response.isSuccessful) error("HTTP ${response.code}: $bodyStr")
             return parseResult(bodyStr)
         }
@@ -158,6 +165,7 @@ object NudgeAnalyzer {
             .getJSONObject("content").getJSONArray("parts").getJSONObject(0)
             .getString("text")
 
+        Log.i(TAG, "모델 판단 JSON: $text")
         val obj = JSONObject(text)
         val important = obj.optBoolean("important", false)
         if (!important) return NudgeResult.NONE
