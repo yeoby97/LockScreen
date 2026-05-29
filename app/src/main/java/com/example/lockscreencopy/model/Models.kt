@@ -116,9 +116,10 @@ data class AiTextSlot(
 
 /** AI 위젯 렌더링 템플릿 타입. */
 enum class AiWidgetTemplateType {
-    GLASS_INFO,   // 반투명 글래스 카드. 왼쪽 정보 + 오른쪽 장식 이미지.
-    STICKER,      // 장식 이미지를 큰 스티커처럼 중앙/상단에 배치. 텍스트는 하단 칩.
-    LABEL_BOARD,  // 메모장/표지판 형태. 텍스트가 주인공, 장식은 모서리 액센트.
+    GLASS_INFO,      // Full Bleed + 하단 왼쪽 글래스 메인 패널 + 오른쪽 칩
+    STICKER,         // Full Bleed + 하단 전체 너비 글래스 바
+    LABEL_BOARD,     // Full Bleed + 하단 글래스 목록 패널
+    VISION_OVERLAY,  // Full Bleed + Vision API로 감지한 좌표에 텍스트 오버레이
 }
 
 /**

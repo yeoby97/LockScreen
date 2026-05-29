@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -129,7 +130,7 @@ fun AiSketchWidgetItem(
                     ),
             )
 
-            // ③ 글래스 텍스트 패널 (템플릿별 레이아웃)
+            // ③ 텍스트 오버레이 (템플릿별 레이아웃)
             when (widget.templateType) {
                 AiWidgetTemplateType.GLASS_INFO ->
                     GlassInfoOverlay(widget.textSlots, scaleFactor, isFloating, onSlotClick)
@@ -137,6 +138,8 @@ fun AiSketchWidgetItem(
                     StickerOverlay(widget.textSlots, scaleFactor, isFloating, onSlotClick)
                 AiWidgetTemplateType.LABEL_BOARD ->
                     LabelBoardOverlay(widget.textSlots, scaleFactor, isFloating, onSlotClick)
+                AiWidgetTemplateType.VISION_OVERLAY ->
+                    VisionOverlay(widget.textSlots, scaleFactor, isFloating, onSlotClick)
             }
         }
 
@@ -317,6 +320,64 @@ private fun LabelBoardOverlay(
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VISION_OVERLAY: Vision API가 감지한 xRatio/yRatio 좌표에 텍스트 정확히 배치
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun VisionOverlay(
+    slots: List<AiTextSlot>,
+    scaleFactor: Float,
+    isFloating: Boolean,
+    onSlotClick: ((AiTextSlot) -> Unit)?,
+) {
+    if (slots.isEmpty()) return
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val w = maxWidth
+        val h = maxHeight
+        slots.forEach { slot ->
+            val slotX = w * slot.xRatio
+            val slotY = h * slot.yRatio
+            val slotW = w * slot.widthRatio.coerceAtLeast(0.25f)
+            val slotH = h * slot.heightRatio.coerceAtLeast(0.12f)
+
+            Box(
+                modifier = Modifier
+                    .offset(x = slotX, y = slotY)
+                    .width(slotW)
+                    .height(slotH)
+                    .clip(GlassPanelShape)
+                    .background(Color.Black.copy(alpha = 0.38f))
+                    .border(0.5.dp, Color.White.copy(alpha = 0.28f), GlassPanelShape)
+                    .then(
+                        if (!isFloating && onSlotClick != null)
+                            Modifier.pointerInput(slot.label) { detectTapGestures { onSlotClick(slot) } }
+                        else Modifier,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = slot.value,
+                        color = Color.White,
+                        fontSize = (13f * scaleFactor).sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (slot.label.isNotBlank()) {
+                        Text(
+                            text = slot.label,
+                            color = Color.White.copy(alpha = 0.68f),
+                            fontSize = (9f * scaleFactor).sp,
+                            maxLines = 1,
+                        )
                     }
                 }
             }

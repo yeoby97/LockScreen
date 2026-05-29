@@ -212,12 +212,14 @@ object GeminiClient {
 
     /**
      * 사용자 입력(imageShape + infoQuery)에서 적합한 위젯 템플릿을 선택한다.
+     * - "vision" 키워드 → VISION_OVERLAY (Vision API 좌표 감지 모드)
      * - "공부/메모/할 일/일정" 키워드 → LABEL_BOARD
      * - "캐릭터/귀여운/동물/우주/스티커" 등 감성형 → STICKER
      * - 그 외 날씨/운동/기본 정보형 → GLASS_INFO
      */
     fun selectTemplate(imageShape: String, infoQuery: String): AiWidgetTemplateType {
         val combined = (imageShape + " " + infoQuery).lowercase()
+        if (combined.contains("vision") || combined.contains("비전")) return AiWidgetTemplateType.VISION_OVERLAY
         val labelBoardKeywords = listOf("공부", "할 일", "할일", "메모", "일정", "노트", "todo", "체크", "리스트")
         val stickerKeywords = listOf(
             "목장", "양", "고양이", "강아지", "우주", "행성", "캐릭터", "귀여운", "귀엽",
@@ -386,6 +388,118 @@ object GeminiClient {
         }
         val hint = if (textBuf.isNotBlank()) " 모델 응답: ${textBuf.take(300)}" else ""
         throw LlmException("이미지 데이터(inlineData)가 없습니다.$hint")
+    }
+
+    /**
+     * [Vision 피드백 루프] 생성된 이미지를 Gemini Vision에 보내
+     * 각 정보 슬롯을 올려놓기 적합한 위치를 감지하고, xRatio/yRatio가 채워진 슬롯 목록을 반환한다.
+     * API 키 없음 / 오류 시 원본 slots를 그대로 반환한다.
+     */
+    suspend fun detectTextSlots(
+        imageBytes: ByteArray,
+        slots: List<AiTextSlot>,
+    ): List<AiTextSlot> = withContext(Dispatchers.IO) {
+        if (API_KEY.isBlank() || API_KEY == "YOUR_GEMINI_API_KEY") return@withContext slots
+        if (slots.isEmpty()) return@withContext slots
+
+        val labelsJson = slots.mapIndexed { i, s ->
+            "{\"index\": $i, \"label\": \"${s.label}\", \"value\": \"${s.value}\"}"
+        }.joinToString(", ", "[", "]")
+
+        val prompt = """
+            You are analyzing a widget background image.
+            I need to place ${slots.size} text overlay(s) on this image.
+            Items: $labelsJson
+
+            For each item, find the BEST location where:
+            1. The area has good visual contrast (text will be readable)
+            2. The area feels natural for displaying that type of information
+            3. Slots do NOT overlap each other
+
+            Rules:
+            - Prefer lower half of image for most items
+            - x, y = top-left corner of the slot (0.0 to 1.0)
+            - w >= 0.25, h >= 0.12
+            - Keep slots inside image bounds
+
+            Respond ONLY with JSON, no explanation:
+            {"slots": [{"index": 0, "x": 0.05, "y": 0.68, "w": 0.42, "h": 0.16}, ...]}
+        """.trimIndent()
+
+        val base64Image = android.util.Base64.encodeToString(imageBytes, android.util.Base64.NO_WRAP)
+
+        val bodyJson = JSONObject().apply {
+            put("contents", JSONArray().put(
+                JSONObject().apply {
+                    put("parts", JSONArray().apply {
+                        put(JSONObject().put("text", prompt))
+                        put(JSONObject().apply {
+                            put("inlineData", JSONObject().apply {
+                                put("mimeType", "image/png")
+                                put("data", base64Image)
+                            })
+                        })
+                    })
+                },
+            ))
+            put("generationConfig", JSONObject().apply {
+                put("temperature", 0.1)
+                put("responseMimeType", "application/json")
+            })
+        }
+
+        val request = Request.Builder()
+            .url("$ENDPOINT?key=$API_KEY")
+            .header("Content-Type", "application/json; charset=utf-8")
+            .post(bodyJson.toString().toRequestBody(jsonMedia))
+            .build()
+
+        runCatching {
+            val raw = callGeminiRequest(request)
+            parseVisionSlots(raw, slots)
+        }.getOrElse { slots }
+    }
+
+    private fun parseVisionSlots(raw: String, originalSlots: List<AiTextSlot>): List<AiTextSlot> {
+        val obj = runCatching { JSONObject(sanitizeJson(raw)) }.getOrNull()
+            ?: return originalSlots
+        val arr = obj.optJSONArray("slots") ?: return originalSlots
+        val updated = originalSlots.toMutableList()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val idx = o.optInt("index", -1)
+            if (idx < 0 || idx >= updated.size) continue
+            val x = o.optDouble("x", 0.05).toFloat().coerceIn(0f, 0.95f)
+            val y = o.optDouble("y", 0.60).toFloat().coerceIn(0f, 0.95f)
+            val w = o.optDouble("w", 0.35).toFloat().coerceIn(0.20f, 1f).coerceAtMost(1f - x)
+            val h = o.optDouble("h", 0.14).toFloat().coerceIn(0.10f, 1f).coerceAtMost(1f - y)
+            updated[idx] = updated[idx].copy(xRatio = x, yRatio = y, widthRatio = w, heightRatio = h)
+        }
+        return updated
+    }
+
+    /** 미리 만들어진 Request를 전송하고 텍스트 응답을 반환한다. */
+    private fun callGeminiRequest(request: Request): String {
+        var lastError: Throwable? = null
+        for (attempt in 1..MAX_ATTEMPTS) {
+            try {
+                client.newCall(request).execute().use { resp ->
+                    val raw = resp.body?.string().orEmpty()
+                    if (!resp.isSuccessful) {
+                        if (resp.code in 500..599 && attempt < MAX_ATTEMPTS) {
+                            lastError = LlmException("서버 오류 ${resp.code}"); return@use
+                        }
+                        throw LlmException("Vision 호출 실패 (${resp.code}): ${raw.take(300)}")
+                    }
+                    return extractText(raw)
+                }
+            } catch (e: LlmException) { throw e } catch (e: IOException) {
+                lastError = e
+                if (attempt >= MAX_ATTEMPTS) throw LlmException("네트워크 오류 (${e.message})", e)
+                Thread.sleep(300L * attempt)
+            }
+        }
+        throw LlmException("Vision 호출 실패", lastError)
     }
 
     private fun aspectRatioLabel(ratio: Float): String = when {

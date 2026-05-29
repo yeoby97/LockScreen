@@ -1030,25 +1030,33 @@ fun LockScreen(
                             // 3. 입력 키워드에서 템플릿 선택 (LLM 호출 없는 규칙 기반)
                             val templateType = GeminiClient.selectTemplate(imageShape, infoQuery)
 
-                            // 4. 장식 이미지 전용 프롬프트 생성 — 정보 카테고리 단어 없음
+                            // 4. Full Bleed 배경 이미지 프롬프트 생성
                             val decorationPrompt = GeminiClient.buildDecorationPrompt(imageShape, templateType)
 
-                            // 5. 장식 이미지만 생성 (캐릭터/스티커, 글자 없음, 투명 배경)
+                            // 5. 배경 이미지 생성
                             val imageBytes = GeminiClient.generateWidgetImage(decorationPrompt)
                             val bitmap = withContext(Dispatchers.Default) {
                                 BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
                             }
 
-                            // 6. 정보 항목 → 텍스트 슬롯 변환 (위치는 템플릿이 결정, role만 설정)
-                            val textSlots = resolvedItems.mapIndexed { i, item ->
+                            // 6. 정보 항목 → 텍스트 슬롯 초기화 (role만 설정, 좌표는 0)
+                            val rawSlots = resolvedItems.mapIndexed { i, item ->
                                 AiTextSlot(
                                     label = item.label,
                                     value = item.value,
                                     role = if (i == 0) "main" else "sub",
                                     xRatio = 0f, yRatio = 0f,
-                                    widthRatio = 1f, heightRatio = 1f,
+                                    widthRatio = 0f, heightRatio = 0f,
                                     source = item.source,
                                 )
+                            }
+
+                            // 6b. VISION_OVERLAY 템플릿: 생성된 이미지를 Vision API로 분석해
+                            //     각 슬롯의 실제 좌표를 감지한다 (추가 API 호출 1회).
+                            val textSlots = if (templateType == AiWidgetTemplateType.VISION_OVERLAY) {
+                                GeminiClient.detectTextSlots(imageBytes, rawSlots)
+                            } else {
+                                rawSlots
                             }
 
                             // 7. 미리보기 오버레이로 이동 (배치 전 확인 단계)
