@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material3.Button
 import androidx.compose.material3.FloatingActionButton
@@ -161,8 +162,7 @@ fun LockScreen(
 
     val realNotifications by NotificationRepository.notifications.collectAsState()
     val dummyNotifications = remember { sampleNotifications() }
-    var useDummyNotifications by remember { mutableStateOf(false) }
-    val notifications = if (useDummyNotifications) dummyNotifications else realNotifications
+    var notificationMode by remember { mutableStateOf(NotificationMode.DUMMY) }
 
     var hasNotificationPermission by remember { mutableStateOf(isNotificationListenerEnabled(context)) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -644,16 +644,23 @@ fun LockScreen(
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
-                if (!hasNotificationPermission) {
-                    NotificationPermissionBanner(
-                        onOpenSettings = { openNotificationListenerSettings(context) },
+                when (notificationMode) {
+                    NotificationMode.DUMMY -> NudgeNotificationDisplay(
+                        notifications = dummyNotifications,
                         modifier = Modifier.fillMaxWidth().weight(1f),
                     )
-                } else {
-                    NudgeNotificationDisplay(
-                        notifications = notifications,
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                    )
+                    NotificationMode.REAL -> if (!hasNotificationPermission) {
+                        NotificationPermissionBanner(
+                            onOpenSettings = { openNotificationListenerSettings(context) },
+                            modifier = Modifier.fillMaxWidth().weight(1f),
+                        )
+                    } else {
+                        NudgeNotificationDisplay(
+                            notifications = realNotifications,
+                            modifier = Modifier.fillMaxWidth().weight(1f),
+                        )
+                    }
+                    NotificationMode.NONE -> Spacer(Modifier.weight(1f))
                 }
             }
 
@@ -975,8 +982,8 @@ fun LockScreen(
 
         if (isFloating) {
             NotificationSourceButton(
-                useDummy = useDummyNotifications,
-                onToggle = { useDummyNotifications = !useDummyNotifications },
+                mode = notificationMode,
+                onCycle = { notificationMode = notificationMode.next() },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = 24.dp, bottom = screenHeight * 0.28f)
@@ -1158,28 +1165,32 @@ private fun EditModeTopBar(visible: Boolean, alpha: Float = 1f, onConfirm: () ->
 
 @Composable
 private fun NotificationSourceButton(
-    useDummy: Boolean,
-    onToggle: () -> Unit,
+    mode: NotificationMode,
+    onCycle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val dummyOrange = Color(0xFFFF9500)
     val liveGreen = Color(0xFF34C759)
-    val color = if (useDummy) dummyOrange else liveGreen
-    val label = if (useDummy) "더미" else "실시간"
-    val icon = if (useDummy) Icons.Filled.Science else Icons.Filled.NotificationsActive
+    val offGray = Color(0xFF8E8E93)
+
+    val (color, label, icon) = when (mode) {
+        NotificationMode.DUMMY -> Triple(dummyOrange, "더미", Icons.Filled.Science)
+        NotificationMode.REAL  -> Triple(liveGreen,  "실시간", Icons.Filled.NotificationsActive)
+        NotificationMode.NONE  -> Triple(offGray,    "없음", Icons.Filled.NotificationsOff)
+    }
 
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         FloatingActionButton(
-            onClick = onToggle,
+            onClick = onCycle,
             containerColor = color,
             contentColor = Color.White,
             shape = CircleShape,
             modifier = Modifier.size(48.dp),
         ) {
-            Icon(icon, contentDescription = "알림 소스 전환")
+            Icon(icon, contentDescription = "알림 모드 전환")
         }
         Spacer(Modifier.height(4.dp))
         Box(
@@ -1195,4 +1206,9 @@ private fun NotificationSourceButton(
             )
         }
     }
+}
+
+private enum class NotificationMode {
+    DUMMY, REAL, NONE;
+    fun next() = entries[(ordinal + 1) % entries.size]
 }
