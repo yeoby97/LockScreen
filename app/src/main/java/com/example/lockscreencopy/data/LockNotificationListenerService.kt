@@ -41,7 +41,7 @@ class LockNotificationListenerService : NotificationListenerService() {
     }
 
     /**
-     * 정규식으로 즉시 표시한 넛지를 AI로 재분석해 결과가 바뀌면 갱신한다.
+     * 일반 알림으로 먼저 표시한 메시지를 AI로 분석해, 넛지면 결과를 채워 갱신한다.
      * 단톡방 폭주를 고려해, 값싼 1차 필터([NudgeAnalyzer.isCandidate])를 통과한
      * 메시지만 실제 분석(API 호출) 대상으로 삼는다.
      */
@@ -75,18 +75,14 @@ class LockNotificationListenerService : NotificationListenerService() {
             ?: extras.getString(Notification.EXTRA_TEXT)
             ?: ""
         val appName = NotificationRepository.resolveAppName(applicationContext, packageName)
-        val nudge = detectNudge(title, body)
 
+        // 넛지는 전적으로 AI(refineNudge)가 채운다. 도착 시점엔 일반 알림으로 표시.
         return NotificationItem(
             id = key,
             appName = appName,
             title = title,
             body = body,
             timeLabel = formatRelativeTime(postTime),
-            hasNudge = nudge.hasNudge,
-            nudgeLabel = nudge.nudgeLabel,
-            nudgeActions = nudge.actions,
-            mapQuery = nudge.mapQuery,
         )
     }
 

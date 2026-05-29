@@ -12,14 +12,29 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 
+data class NudgeResult(
+    val hasNudge: Boolean,
+    val nudgeLabel: String,
+    val actions: List<String>,
+    /** 지도 검색용 정제된 장소명. 없으면 빈 문자열. */
+    val mapQuery: String = "",
+) {
+    companion object {
+        val NONE = NudgeResult(hasNudge = false, nudgeLabel = "", actions = emptyList())
+    }
+}
+
 /**
  * 메시지 행동(넛지)을 의미 단위로 분석한다.
  *
  * 구현 메모(데모): 진짜 온디바이스 LLM(Gemini Nano)은 Z플립5 등 AICore 미지원
  * 기기에서 동작하지 않으므로, 데모 단계에서는 클라우드 Gemini API
  * (`gemini-2.5-flash-lite`, 경량·저지연 모델)를 호출한다. UI에서는 "온디바이스 AI"로
- * 표현하되, 추후 지원 기기에서 진짜 온디바이스로 교체할 수 있도록 [analyze] 시그니처를
- * 정규식 폴백([detectNudge])과 동일하게 유지한다.
+ * 표현하되, 추후 지원 기기에서 진짜 온디바이스로 교체할 수 있다.
+ *
+ * 모든 넛지 판단은 전적으로 이 AI가 담당한다(정규식/키워드 패턴 미사용).
+ * 따라서 화면에 뜨는 넛지는 곧 'AI가 찾은 것'이며, 키가 없거나 호출이 실패하면
+ * 넛지를 표시하지 않는다([NudgeResult.NONE]).
  *
  * 목적: 단톡방/오픈톡방처럼 메시지가 폭주하는 상황에서, 잡담 사이에 섞인
  * "실제 행동으로 이어질 수 있는(액션 가능)" 중요한 메시지만 넛지로 띄운다.
@@ -61,6 +76,11 @@ object NudgeAnalyzer {
           실제 상호명이나 지명만 넣으세요. 장소가 없으면 "".
           (예: "최희준한테 맛집 추천받았어" → 특정 장소가 없으므로 "")
           (예: "토요일에 강남역 한우집 갈까?" → "강남역 한우집")
+
+        중요: 날짜·시간이 없어도 "어디 가자/가실래요/가시죠"처럼 특정 장소로의
+        방문을 제안하면 그 자체로 행동(지도 열기)이므로 important=true 로 본다.
+          (예: "김밥천국 갑시다" → important=true, label="지도 열기",
+               actions=["지도 열기"], mapQuery="김밥천국")
     """.trimIndent()
 
     /**
@@ -75,15 +95,18 @@ object NudgeAnalyzer {
 
     /**
      * 메시지를 의미 분석해 넛지 결과를 반환한다. 키가 없거나 호출이 실패하면
-     * 정규식 폴백([detectNudge])으로 안전하게 대체한다.
+     * 넛지를 표시하지 않는다([NudgeResult.NONE]) — 정규식 폴백은 사용하지 않는다.
      */
     suspend fun analyze(title: String, body: String): NudgeResult {
-        if (apiKey.isBlank()) return detectNudge(title, body)
+        if (apiKey.isBlank()) {
+            Log.w(TAG, "GEMINI_API_KEY 미설정 — AI 분석을 건너뛴다(넛지 없음)")
+            return NudgeResult.NONE
+        }
         return withContext(Dispatchers.IO) {
             runCatching { requestGemini(title, body) }
                 .getOrElse {
-                    Log.w(TAG, "Gemini 분석 실패, 정규식 폴백 사용", it)
-                    detectNudge(title, body)
+                    Log.w(TAG, "Gemini 분석 실패, 넛지 없음으로 처리", it)
+                    NudgeResult.NONE
                 }
         }
     }
@@ -137,7 +160,7 @@ object NudgeAnalyzer {
 
         val obj = JSONObject(text)
         val important = obj.optBoolean("important", false)
-        if (!important) return NudgeResult(hasNudge = false, nudgeLabel = "", actions = emptyList())
+        if (!important) return NudgeResult.NONE
 
         val label = obj.optString("label", "")
         val actions = obj.optJSONArray("actions")?.let { arr ->
@@ -146,9 +169,7 @@ object NudgeAnalyzer {
         val mapQuery = obj.optString("mapQuery", "")
 
         // 액션이 비면 넛지로 보지 않는다.
-        if (actions.isEmpty() && label.isBlank()) {
-            return NudgeResult(hasNudge = false, nudgeLabel = "", actions = emptyList())
-        }
+        if (actions.isEmpty() && label.isBlank()) return NudgeResult.NONE
         return NudgeResult(
             hasNudge = true,
             nudgeLabel = label.ifBlank { actions.first() },
