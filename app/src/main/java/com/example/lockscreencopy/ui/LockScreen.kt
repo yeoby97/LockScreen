@@ -81,6 +81,7 @@ import com.example.lockscreencopy.data.loadWeeklyUsage
 import com.example.lockscreencopy.data.openUsageAccessSettings
 import com.example.lockscreencopy.data.topUsedAppsWithGap
 import com.example.lockscreencopy.model.AiSketchWidget
+import com.example.lockscreencopy.model.AiWidgetTemplateType
 import com.example.lockscreencopy.ui.llm.GhostInstance
 import com.example.lockscreencopy.ui.llm.LlmAppStrip
 import com.example.lockscreencopy.ui.llm.LlmRealWidgetGhost
@@ -984,7 +985,8 @@ fun LockScreen(
                     aiSketchCounter++
                     aiSketchWidgets = aiSketchWidgets + AiSketchWidget(
                         uid = "ai_sketch_$aiSketchCounter",
-                        imageBitmap = pending.bitmap,
+                        templateType = pending.templateType,
+                        decorationBitmap = pending.bitmap,
                         textSlots = adjustedSlots,
                         offset = Offset(pending.widgetRect.left, pending.widgetRect.top),
                         widthDp = pending.widthDp,
@@ -1014,8 +1016,6 @@ fun LockScreen(
                     sketchLoading = true
                     sketchScope.launch {
                         try {
-                            val aspectRatio = (rect.right - rect.left) / (rect.bottom - rect.top)
-
                             // 1. LLM이 자연어 정보 입력 → (레이블, 샘플값) 쌍 목록으로 파싱
                             val parsedItems = GeminiClient.parseInfoItems(infoQuery)
                             if (parsedItems.isEmpty()) {
@@ -1024,29 +1024,40 @@ fun LockScreen(
                                 return@launch
                             }
 
-                            // 1b. 실제 데이터 소스 해석 (배터리/시간/날짜는 실제값, 나머지는 샘플값 유지)
+                            // 2. 실제 데이터 소스 해석 (배터리/시간/날짜는 실제값, 나머지 샘플)
                             val resolvedItems = DataSourceResolver.resolve(context, parsedItems)
 
-                            // 2. text pad 위치가 있는 위젯 스킨 장면 설계
-                            val scene = GeminiClient.designSketchScene(
-                                infoItems = resolvedItems,
-                                imageShape = imageShape,
-                                aspectRatio = aspectRatio,
-                            )
-                            val slots = scene.slots
+                            // 3. 입력 키워드에서 템플릿 선택 (LLM 호출 없는 규칙 기반)
+                            val templateType = GeminiClient.selectTemplate(imageShape, infoQuery)
 
-                            // 3. 투명 배경 + 글자 없는 이미지 생성 (텍스트는 앱이 슬롯 위에 얹음)
-                            val imageBytes = GeminiClient.generateWidgetImage(scene.imagePrompt)
+                            // 4. 장식 이미지 전용 프롬프트 생성 — 정보 카테고리 단어 없음
+                            val decorationPrompt = GeminiClient.buildDecorationPrompt(imageShape, templateType)
+
+                            // 5. 장식 이미지만 생성 (캐릭터/스티커, 글자 없음, 투명 배경)
+                            val imageBytes = GeminiClient.generateWidgetImage(decorationPrompt)
                             val bitmap = withContext(Dispatchers.Default) {
                                 BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
                             }
 
-                            // 4. 생성 결과를 슬롯 보정 대기 상태로 저장 — 바로 확정하지 않음
+                            // 6. 정보 항목 → 텍스트 슬롯 변환 (위치는 템플릿이 결정, role만 설정)
+                            val textSlots = resolvedItems.mapIndexed { i, item ->
+                                AiTextSlot(
+                                    label = item.label,
+                                    value = item.value,
+                                    role = if (i == 0) "main" else "sub",
+                                    xRatio = 0f, yRatio = 0f,
+                                    widthRatio = 1f, heightRatio = 1f,
+                                    source = item.source,
+                                )
+                            }
+
+                            // 7. 미리보기 오버레이로 이동 (배치 전 확인 단계)
                             val widthDp = with(density) { (rect.right - rect.left).toDp().value }
                             val heightDp = with(density) { (rect.bottom - rect.top).toDp().value }
                             pendingSketchAdjust = PendingSketch(
                                 bitmap = bitmap,
-                                initialSlots = slots,
+                                templateType = templateType,
+                                initialSlots = textSlots,
                                 widgetRect = rect,
                                 widthDp = widthDp,
                                 heightDp = heightDp,

@@ -1,6 +1,7 @@
 package com.example.lockscreencopy.data
 
 import com.example.lockscreencopy.model.AiTextSlot
+import com.example.lockscreencopy.model.AiWidgetTemplateType
 import com.example.lockscreencopy.model.BottomShortcut
 import com.example.lockscreencopy.model.InfoSource
 import com.example.lockscreencopy.model.LockWidget
@@ -208,6 +209,54 @@ object GeminiClient {
             lower.contains("자외선") || lower.contains("uv") -> "보통 5"
             else -> "--"
         }
+    }
+
+    /**
+     * 사용자 입력(imageShape + infoQuery)에서 적합한 위젯 템플릿을 선택한다.
+     * - "공부/메모/할 일/일정" 키워드 → LABEL_BOARD
+     * - "캐릭터/귀여운/동물/우주/스티커" 등 감성형 → STICKER
+     * - 그 외 날씨/운동/기본 정보형 → GLASS_INFO
+     */
+    fun selectTemplate(imageShape: String, infoQuery: String): AiWidgetTemplateType {
+        val combined = (imageShape + " " + infoQuery).lowercase()
+        val labelBoardKeywords = listOf("공부", "할 일", "할일", "메모", "일정", "노트", "todo", "체크", "리스트")
+        val stickerKeywords = listOf(
+            "목장", "양", "고양이", "강아지", "우주", "행성", "캐릭터", "귀여운", "귀엽",
+            "스티커", "동물", "판타지", "드래곤", "공룡", "토끼", "곰", "펭귄", "별", "구름",
+        )
+        return when {
+            labelBoardKeywords.any { combined.contains(it) } -> AiWidgetTemplateType.LABEL_BOARD
+            stickerKeywords.any { combined.contains(it) } -> AiWidgetTemplateType.STICKER
+            else -> AiWidgetTemplateType.GLASS_INFO
+        }
+    }
+
+    /**
+     * 템플릿 타입에 맞는 장식 이미지 전용 생성 프롬프트를 만든다.
+     * AI는 위젯 전체 UI가 아닌, 카드 위에 올릴 장식 요소만 만든다.
+     * WEATHER/TEMP/BATTERY 같은 정보 카테고리 단어는 절대 넣지 않는다.
+     */
+    fun buildDecorationPrompt(imageShape: String, templateType: AiWidgetTemplateType): String {
+        val subject = imageShape.trim().ifBlank { "cute character" }
+        return when (templateType) {
+            AiWidgetTemplateType.STICKER ->
+                "A cute large $subject sticker, soft 3D illustration style, centered composition, " +
+                "fully transparent background, no text, no numbers, no letters, no labels, no words anywhere, " +
+                "isolated single decorative element, clean edges, high quality render"
+
+            AiWidgetTemplateType.GLASS_INFO ->
+                "A small cute $subject illustration for widget decoration, right-side placement, " +
+                "fully transparent background, soft pastel colors, simple clean design, " +
+                "no text, no numbers, no letters, no labels anywhere, " +
+                "isolated decorative element, compact composition"
+
+            AiWidgetTemplateType.LABEL_BOARD ->
+                "A tiny cute $subject corner decoration sticker, miniature style, " +
+                "fully transparent background, minimal simple design, " +
+                "no text, no numbers, no letters, no labels anywhere, " +
+                "small isolated decorative accent element"
+        } + " CRITICAL: Do NOT render any letters, numbers, words, or symbols anywhere. " +
+            "Fully transparent PNG background. High quality polished illustration."
     }
 
     /**

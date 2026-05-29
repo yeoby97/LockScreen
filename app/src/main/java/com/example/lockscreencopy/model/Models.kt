@@ -114,10 +114,22 @@ data class AiTextSlot(
     val source: InfoSource = InfoSource.SAMPLE, // 값 출처
 )
 
-/** AI 스케치로 생성된 이미지 위젯. Imagen 이미지 + 슬롯 기반 텍스트 오버레이. */
+/** AI 위젯 렌더링 템플릿 타입. */
+enum class AiWidgetTemplateType {
+    GLASS_INFO,   // 반투명 글래스 카드. 왼쪽 정보 + 오른쪽 장식 이미지.
+    STICKER,      // 장식 이미지를 큰 스티커처럼 중앙/상단에 배치. 텍스트는 하단 칩.
+    LABEL_BOARD,  // 메모장/표지판 형태. 텍스트가 주인공, 장식은 모서리 액센트.
+}
+
+/**
+ * AI 스케치로 생성된 템플릿 기반 위젯.
+ * decorationBitmap은 Compose 카드 위에 올릴 장식 이미지(캐릭터/스티커/패턴).
+ * 카드 모양/텍스트/여백은 templateType에 따라 Compose가 그린다.
+ */
 data class AiSketchWidget(
     val uid: String,
-    val imageBitmap: android.graphics.Bitmap?,
+    val templateType: AiWidgetTemplateType = AiWidgetTemplateType.GLASS_INFO,
+    val decorationBitmap: android.graphics.Bitmap?,
     val textSlots: List<AiTextSlot>,
     val offset: Offset,
     val widthDp: Float,
