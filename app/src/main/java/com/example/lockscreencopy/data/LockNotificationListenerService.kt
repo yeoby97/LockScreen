@@ -22,8 +22,6 @@ class LockNotificationListenerService : NotificationListenerService() {
             emptyList()
         }
         NotificationRepository.reset(items)
-        // 한국어 엔티티 추출 모델을 미리 내려받아 첫 추론 지연을 줄인다.
-        scope.launch { NudgeAnalyzer.warmUp() }
         items.forEach { refineNudge(it) }
     }
 
@@ -42,13 +40,19 @@ class LockNotificationListenerService : NotificationListenerService() {
         refineNudge(item)
     }
 
-    /** 정규식으로 즉시 표시한 넛지를 온디바이스 AI로 재분석해 결과가 바뀌면 갱신한다. */
+    /**
+     * 정규식으로 즉시 표시한 넛지를 AI로 재분석해 결과가 바뀌면 갱신한다.
+     * 단톡방 폭주를 고려해, 값싼 1차 필터([NudgeAnalyzer.isCandidate])를 통과한
+     * 메시지만 실제 분석(API 호출) 대상으로 삼는다.
+     */
     private fun refineNudge(item: NotificationItem) {
+        if (!NudgeAnalyzer.isCandidate(item.title, item.body)) return
         scope.launch {
             val refined = NudgeAnalyzer.analyze(item.title, item.body)
             if (refined.hasNudge != item.hasNudge ||
                 refined.nudgeLabel != item.nudgeLabel ||
-                refined.actions != item.nudgeActions
+                refined.actions != item.nudgeActions ||
+                refined.mapQuery != item.mapQuery
             ) {
                 NotificationRepository.updateNudge(item.id, refined)
             }
@@ -71,7 +75,7 @@ class LockNotificationListenerService : NotificationListenerService() {
             ?: extras.getString(Notification.EXTRA_TEXT)
             ?: ""
         val appName = NotificationRepository.resolveAppName(applicationContext, packageName)
-        val (hasNudge, nudgeLabel, nudgeActions) = detectNudge(title, body)
+        val nudge = detectNudge(title, body)
 
         return NotificationItem(
             id = key,
@@ -79,9 +83,10 @@ class LockNotificationListenerService : NotificationListenerService() {
             title = title,
             body = body,
             timeLabel = formatRelativeTime(postTime),
-            hasNudge = hasNudge,
-            nudgeLabel = nudgeLabel,
-            nudgeActions = nudgeActions,
+            hasNudge = nudge.hasNudge,
+            nudgeLabel = nudge.nudgeLabel,
+            nudgeActions = nudge.actions,
+            mapQuery = nudge.mapQuery,
         )
     }
 

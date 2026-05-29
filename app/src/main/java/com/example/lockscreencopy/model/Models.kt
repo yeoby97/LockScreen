@@ -135,4 +135,6 @@ data class NotificationItem(
     val hasNudge: Boolean = false,
     val nudgeLabel: String = "",
     val nudgeActions: List<String> = emptyList(),
+    /** 지도 검색에 사용할 정제된 장소명. AI가 발신자명/잡설을 제외하고 추출한다. */
+    val mapQuery: String = "",
 )

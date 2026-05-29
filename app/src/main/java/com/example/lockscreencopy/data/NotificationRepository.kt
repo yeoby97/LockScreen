@@ -34,6 +34,7 @@ object NotificationRepository {
                     hasNudge = result.hasNudge,
                     nudgeLabel = result.nudgeLabel,
                     nudgeActions = result.actions,
+                    mapQuery = result.mapQuery,
                 )
             }
         }

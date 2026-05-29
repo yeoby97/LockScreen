@@ -171,7 +171,7 @@ private fun NudgeTeaserBadge(label: String) {
     ) {
         Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = nudgePurple, modifier = Modifier.size(11.dp))
         Spacer(Modifier.width(4.dp))
-        Text("$label 제안 · 탭해서 확인", color = nudgePurple, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+        Text("온디바이스 AI · $label 제안 · 탭해서 확인", color = nudgePurple, fontSize = 10.sp, fontWeight = FontWeight.Medium)
     }
 }
 

@@ -23,6 +23,9 @@ private fun buildCalendarIntent(item: NotificationItem): Intent =
     }
 
 private fun buildMapsIntent(item: NotificationItem): Intent? {
-    val query = extractPlaceQuery("${item.title} ${item.body}") ?: return null
+    // AI가 정제한 장소명을 우선 사용하고, 없으면 정규식 폴백으로 추출한다.
+    val query = item.mapQuery.takeIf { it.isNotBlank() }
+        ?: extractPlaceQuery("${item.title} ${item.body}")
+        ?: return null
     return Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(query)}"))
 }
