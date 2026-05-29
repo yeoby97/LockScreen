@@ -236,6 +236,7 @@ fun LockScreen(
 
     var clockOffset by remember { mutableStateOf(Offset.Zero) }
     var clockNaturalPosition by remember { mutableStateOf(Offset.Zero) }
+    var clockColumnHeightDp by remember { mutableStateOf(0.dp) }
 
     // 점유영역 실측용 좌표 (스케일 Box 기준 프레임 + 각 UI 요소)
     var contentRootCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -576,6 +577,7 @@ fun LockScreen(
                     Column(
                         modifier = Modifier
                             .onGloballyPositioned { coords ->
+                                clockColumnHeightDp = with(density) { coords.size.height.toDp() }
                                 if (!isFloating) {
                                     val pos = coords.positionInRoot()
                                     clockNaturalPosition = Offset(
@@ -643,25 +645,7 @@ fun LockScreen(
 
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
-                when (notificationMode) {
-                    NotificationMode.DUMMY -> NudgeNotificationDisplay(
-                        notifications = dummyNotifications,
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                    )
-                    NotificationMode.REAL -> if (!hasNotificationPermission) {
-                        NotificationPermissionBanner(
-                            onOpenSettings = { openNotificationListenerSettings(context) },
-                            modifier = Modifier.fillMaxWidth().weight(1f),
-                        )
-                    } else {
-                        NudgeNotificationDisplay(
-                            notifications = realNotifications,
-                            modifier = Modifier.fillMaxWidth().weight(1f),
-                        )
-                    }
-                    NotificationMode.NONE -> Spacer(Modifier.weight(1f))
-                }
+                Spacer(Modifier.weight(1f))
             }
 
             if (isFloating) {
@@ -883,6 +867,33 @@ fun LockScreen(
                             onRemoveHosted(hosted.uid)
                         },
                     )
+                }
+            }
+
+            if (notificationMode != NotificationMode.NONE) {
+                val notifTopPadding = 16.dp + screenHeight * 0.05f + clockColumnHeightDp + 12.dp
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = notifTopPadding, horizontal = 16.dp),
+                ) {
+                    when (notificationMode) {
+                        NotificationMode.DUMMY -> NudgeNotificationDisplay(
+                            notifications = dummyNotifications,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        NotificationMode.REAL -> if (!hasNotificationPermission) {
+                            NotificationPermissionBanner(
+                                onOpenSettings = { openNotificationListenerSettings(context) },
+                            )
+                        } else {
+                            NudgeNotificationDisplay(
+                                notifications = realNotifications,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        NotificationMode.NONE -> Unit
+                    }
                 }
             }
         }
