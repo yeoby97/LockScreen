@@ -92,9 +92,11 @@ import com.example.lockscreencopy.data.NotificationRepository
 import com.example.lockscreencopy.data.isNotificationListenerEnabled
 import com.example.lockscreencopy.data.openNotificationListenerSettings
 import com.example.lockscreencopy.data.openUsageAccessSettings
+import com.example.lockscreencopy.data.executeNudgeAction
 import com.example.lockscreencopy.data.sampleNotifications
 import com.example.lockscreencopy.data.topUsedAppsWithGap
 import com.example.lockscreencopy.model.AiSketchWidget
+import com.example.lockscreencopy.model.NotificationItem
 import com.example.lockscreencopy.ui.notification.NotificationPermissionBanner
 import com.example.lockscreencopy.ui.notification.NudgeNotificationDisplay
 import com.example.lockscreencopy.ui.llm.GhostInstance
@@ -877,10 +879,13 @@ fun LockScreen(
                         .fillMaxSize()
                         .padding(top = notifTopPadding, horizontal = 16.dp),
                 ) {
+                    val onNudgeAction: (String, NotificationItem) -> Unit =
+                        { action, item -> executeNudgeAction(context, action, item) }
                     when (notificationMode) {
                         NotificationMode.DUMMY -> NudgeNotificationDisplay(
                             notifications = dummyNotifications,
                             modifier = Modifier.fillMaxWidth(),
+                            onActionClick = onNudgeAction,
                         )
                         NotificationMode.REAL -> if (!hasNotificationPermission) {
                             NotificationPermissionBanner(
@@ -890,6 +895,7 @@ fun LockScreen(
                             NudgeNotificationDisplay(
                                 notifications = realNotifications,
                                 modifier = Modifier.fillMaxWidth(),
+                                onActionClick = onNudgeAction,
                             )
                         }
                         NotificationMode.NONE -> Unit

@@ -42,7 +42,7 @@ class LockNotificationListenerService : NotificationListenerService() {
             ?: extras.getString(Notification.EXTRA_TEXT)
             ?: ""
         val appName = NotificationRepository.resolveAppName(applicationContext, packageName)
-        val (hasNudge, nudgeLabel) = detectNudge(title, body)
+        val (hasNudge, nudgeLabel, nudgeActions) = detectNudge(title, body)
 
         return NotificationItem(
             id = key,
@@ -52,7 +52,7 @@ class LockNotificationListenerService : NotificationListenerService() {
             timeLabel = formatRelativeTime(postTime),
             hasNudge = hasNudge,
             nudgeLabel = nudgeLabel,
-            nudgeActions = if (hasNudge) listOf("일정 추가") else emptyList(),
+            nudgeActions = nudgeActions,
         )
     }
 

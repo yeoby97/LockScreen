@@ -62,6 +62,7 @@ private val chipShape = RoundedCornerShape(50)
 fun NudgeNotificationDisplay(
     notifications: List<NotificationItem>,
     modifier: Modifier = Modifier,
+    onActionClick: (action: String, item: NotificationItem) -> Unit = { _, _ -> },
 ) {
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
@@ -70,7 +71,7 @@ fun NudgeNotificationDisplay(
     ) {
         items(notifications, key = { it.id }) { item ->
             if (item.hasNudge) {
-                NudgeFloatingCard(item, Modifier.fillMaxWidth())
+                NudgeFloatingCard(item, Modifier.fillMaxWidth(), onActionClick)
             } else {
                 NormalCard(item, Modifier.fillMaxWidth())
             }
@@ -79,7 +80,11 @@ fun NudgeNotificationDisplay(
 }
 
 @Composable
-private fun NudgeFloatingCard(item: NotificationItem, modifier: Modifier = Modifier) {
+private fun NudgeFloatingCard(
+    item: NotificationItem,
+    modifier: Modifier = Modifier,
+    onActionClick: (action: String, item: NotificationItem) -> Unit = { _, _ -> },
+) {
     var expanded by remember { mutableStateOf(false) }
 
     val infiniteTransition = rememberInfiniteTransition(label = "nudge_float")
@@ -144,7 +149,9 @@ private fun NudgeFloatingCard(item: NotificationItem, modifier: Modifier = Modif
                     if (item.nudgeActions.isNotEmpty()) {
                         Spacer(Modifier.height(10.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            item.nudgeActions.forEach { action -> NudgeActionChip(action) }
+                            item.nudgeActions.forEach { action ->
+                                NudgeActionChip(action, onClick = { onActionClick(action, item) })
+                            }
                         }
                     }
                 }
@@ -169,11 +176,12 @@ private fun NudgeTeaserBadge(label: String) {
 }
 
 @Composable
-private fun NudgeActionChip(label: String) {
+private fun NudgeActionChip(label: String, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .clip(chipShape)
+            .clickable(onClick = onClick)
             .background(nudgePurple.copy(alpha = 0.2f))
             .border(1.dp, nudgePurple.copy(alpha = 0.6f), chipShape)
             .padding(horizontal = 12.dp, vertical = 6.dp),
