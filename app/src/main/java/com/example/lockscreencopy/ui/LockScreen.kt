@@ -113,7 +113,11 @@ import com.example.lockscreencopy.ui.llm.realWidgetGhostKey
 import com.example.lockscreencopy.ui.sketch.PendingSketch
 import com.example.lockscreencopy.ui.sketch.SketchModeOverlay
 import com.example.lockscreencopy.ui.sketch.SlotAdjustOverlay
+import com.example.lockscreencopy.model.SpaceItemLayout
+import com.example.lockscreencopy.ui.space.SpaceCanvas
 import com.example.lockscreencopy.ui.space.SpaceMember
+import com.example.lockscreencopy.ui.space.baseSizeDp
+import com.example.lockscreencopy.ui.space.resizeSpaceItem
 import com.example.lockscreencopy.ui.space.SpaceSketchOverlay
 import com.example.lockscreencopy.ui.space.WidgetSpaceBubble
 import com.example.lockscreencopy.ui.space.WidgetSpaceExpanded
@@ -581,36 +585,64 @@ fun LockScreen(
         aiSketchWidgets.filter { it.spaceId == spaceId }.forEach { add(SpaceMember.Ai(it)) }
     }
 
-    // 영역에 겹친 자유 위젯들을 공간 [id]에 편입. 편입된 uid 집합 반환.
-    fun assignFreeWidgetsToSpace(local: Rect, id: String): Boolean {
-        val fIds = floatingWidgets.filter { it.spaceId == null && floatingRect(it).overlaps(local) }.map { it.uid }.toSet()
-        val hIds = hostedWidgets.filter { it.spaceId == null && hostedRect(it).overlaps(local) }.map { it.uid }.toSet()
-        val aIds = aiSketchWidgets.filter { it.spaceId == null && aiRect(it).overlaps(local) }.map { it.uid }.toSet()
-        if (fIds.isEmpty() && hIds.isEmpty() && aIds.isEmpty()) return false
+    // 위젯의 잠금화면 위치를 스케치 영역 기준 상대좌표로 환산 → 공간 캔버스(dp) 좌표로 매핑.
+    // 사용자가 그린 배치(상대적 위치/크기)를 공간 안에서도 그대로 유지한다.
+    fun seedLayout(rectPx: Rect, local: Rect, scaleX: Float, scaleY: Float): SpaceItemLayout {
+        val lw = (local.right - local.left).coerceAtLeast(1f)
+        val lh = (local.bottom - local.top).coerceAtLeast(1f)
+        val nx = ((rectPx.left - local.left) / lw).coerceIn(0f, 1f)
+        val ny = ((rectPx.top - local.top) / lh).coerceIn(0f, 1f)
+        return SpaceItemLayout(
+            offset = Offset(nx * SpaceCanvas.WIDTH_DP, ny * SpaceCanvas.HEIGHT_DP),
+            scaleX = scaleX,
+            scaleY = scaleY,
+        )
+    }
 
-        if (fIds.isNotEmpty()) {
-            floatingWidgets = floatingWidgets.map { if (it.uid in fIds) it.copy(spaceId = id) else it }
-        }
-        if (aIds.isNotEmpty()) {
-            aiSketchWidgets = aiSketchWidgets.map { if (it.uid in aIds) it.copy(spaceId = id) else it }
-        }
-        if (hIds.isNotEmpty()) {
-            for (i in hostedWidgets.indices) {
-                if (hostedWidgets[i].uid in hIds) hostedWidgets[i] = hostedWidgets[i].copy(spaceId = id)
+    // 영역에 겹친 자유 위젯들을 공간 [id]에 편입하고, 각 멤버의 공간 캔버스 배치를 계산해 반환.
+    fun assignFreeWidgetsToSpace(local: Rect, id: String): Map<String, SpaceItemLayout> {
+        val layouts = linkedMapOf<String, SpaceItemLayout>()
+        floatingWidgets.forEach { fw ->
+            if (fw.spaceId == null && floatingRect(fw).overlaps(local)) {
+                layouts[fw.uid] = seedLayout(floatingRect(fw), local, fw.scaleX, fw.scaleY)
             }
         }
-        return true
+        hostedWidgets.forEach { hw ->
+            if (hw.spaceId == null && hostedRect(hw).overlaps(local)) {
+                layouts[hw.uid] = seedLayout(hostedRect(hw), local, hw.scaleX, hw.scaleY)
+            }
+        }
+        aiSketchWidgets.forEach { w ->
+            if (w.spaceId == null && aiRect(w).overlaps(local)) {
+                layouts[w.uid] = seedLayout(aiRect(w), local, w.scaleX, w.scaleY)
+            }
+        }
+        if (layouts.isEmpty()) return emptyMap()
+
+        val ids = layouts.keys
+        floatingWidgets = floatingWidgets.map { if (it.uid in ids) it.copy(spaceId = id) else it }
+        aiSketchWidgets = aiSketchWidgets.map { if (it.uid in ids) it.copy(spaceId = id) else it }
+        for (i in hostedWidgets.indices) {
+            if (hostedWidgets[i].uid in ids) hostedWidgets[i] = hostedWidgets[i].copy(spaceId = id)
+        }
+        return layouts
     }
 
     // 스케치 확정: target이 있으면 그 공간에 담고, 없으면 새 공간 생성
     fun confirmSpaceSketch(screenRect: Rect, targetId: String?) {
         val local = screenRectToLocal(screenRect)
         if (targetId != null) {
-            assignFreeWidgetsToSpace(local, targetId)
+            val added = assignFreeWidgetsToSpace(local, targetId)
+            if (added.isNotEmpty()) {
+                widgetSpaces = widgetSpaces.map {
+                    if (it.id == targetId) it.copy(layouts = it.layouts + added) else it
+                }
+            }
         } else {
             spaceCounter++
             val id = "space_$spaceCounter"
-            if (!assignFreeWidgetsToSpace(local, id)) {
+            val layouts = assignFreeWidgetsToSpace(local, id)
+            if (layouts.isEmpty()) {
                 spaceCounter--
                 return
             }
@@ -618,7 +650,12 @@ fun LockScreen(
             val bubblePx = with(density) { 104.dp.toPx() }
             val cx = (local.left + local.right) / 2f - bubblePx / 2f
             val cy = (local.top + local.bottom) / 2f - bubblePx / 2f
-            widgetSpaces = widgetSpaces + WidgetSpace(id = id, name = "공간 $spaceCounter", offset = Offset(cx, cy))
+            widgetSpaces = widgetSpaces + WidgetSpace(
+                id = id,
+                name = "공간 $spaceCounter",
+                offset = Offset(cx, cy),
+                layouts = layouts,
+            )
         }
         spaceSketchMode = false
         spaceSketchTargetId = null
@@ -628,12 +665,47 @@ fun LockScreen(
         widgetSpaces = widgetSpaces.map { if (it.id == id) it.copy(name = name) else it }
     }
 
-    // 멤버 위젯 1개를 공간에서 빼 잠금화면 자유 배치로 복귀(원래 위치 유지)
-    fun removeMemberFromSpace(uid: String) {
+    fun spaceMemberByUid(uid: String): SpaceMember? {
+        floatingWidgets.firstOrNull { it.uid == uid }?.let { return SpaceMember.Floating(it) }
+        hostedWidgets.firstOrNull { it.uid == uid }?.let { return SpaceMember.Hosted(it) }
+        aiSketchWidgets.firstOrNull { it.uid == uid }?.let { return SpaceMember.Ai(it) }
+        return null
+    }
+
+    // 멤버 위젯 1개를 공간에서 빼 잠금화면 자유 배치로 복귀(원래 위치 유지) + 레이아웃 제거
+    fun removeMemberFromSpace(spaceId: String, uid: String) {
         floatingWidgets = floatingWidgets.map { if (it.uid == uid) it.copy(spaceId = null) else it }
         aiSketchWidgets = aiSketchWidgets.map { if (it.uid == uid) it.copy(spaceId = null) else it }
         for (i in hostedWidgets.indices) {
             if (hostedWidgets[i].uid == uid) hostedWidgets[i] = hostedWidgets[i].copy(spaceId = null)
+        }
+        widgetSpaces = widgetSpaces.map {
+            if (it.id == spaceId) it.copy(layouts = it.layouts - uid) else it
+        }
+    }
+
+    // 공간 캔버스 내 멤버 이동(델타는 캔버스 dp). 캔버스 경계 안으로 클램프.
+    fun dragSpaceMember(spaceId: String, uid: String, deltaDp: Offset) {
+        widgetSpaces = widgetSpaces.map { sp ->
+            if (sp.id != spaceId) return@map sp
+            val cur = sp.layouts[uid] ?: return@map sp
+            val member = spaceMemberByUid(uid) ?: return@map sp
+            val (bw, bh) = member.baseSizeDp(density.density)
+            val w = bw * cur.scaleX
+            val h = bh * cur.scaleY
+            val nx = (cur.offset.x + deltaDp.x).coerceIn(0f, (SpaceCanvas.WIDTH_DP - w).coerceAtLeast(0f))
+            val ny = (cur.offset.y + deltaDp.y).coerceIn(0f, (SpaceCanvas.HEIGHT_DP - h).coerceAtLeast(0f))
+            sp.copy(layouts = sp.layouts + (uid to cur.copy(offset = Offset(nx, ny))))
+        }
+    }
+
+    fun resizeSpaceMember(spaceId: String, uid: String, dSX: Float, dSY: Float, aX: Float, aY: Float) {
+        widgetSpaces = widgetSpaces.map { sp ->
+            if (sp.id != spaceId) return@map sp
+            val cur = sp.layouts[uid] ?: return@map sp
+            val member = spaceMemberByUid(uid) ?: return@map sp
+            val (bw, bh) = member.baseSizeDp(density.density)
+            sp.copy(layouts = sp.layouts + (uid to resizeSpaceItem(cur, bw, bh, dSX, dSY, aX, aY)))
         }
     }
 
@@ -1012,6 +1084,7 @@ fun LockScreen(
                 WidgetSpaceBubble(
                     space = space,
                     members = membersOf(space.id),
+                    layouts = space.layouts,
                     appWidgetHost = appWidgetHost,
                     isFloating = isFloating,
                     onTap = { expandedSpaceId = space.id },
@@ -1335,7 +1408,9 @@ fun LockScreen(
                     onClose = { expandedSpaceId = null },
                     onDelete = { deleteSpace(sid) },
                     onRename = { newName -> renameSpace(sid, newName) },
-                    onRemoveMember = { uid -> removeMemberFromSpace(uid) },
+                    onRemoveMember = { uid -> removeMemberFromSpace(sid, uid) },
+                    onDragMember = { uid, deltaDp -> dragSpaceMember(sid, uid, deltaDp) },
+                    onResizeMember = { uid, dx, dy, ax, ay -> resizeSpaceMember(sid, uid, dx, dy, ax, ay) },
                     onAddWidgets = {
                         expandedSpaceId = null
                         spaceSketchTargetId = sid

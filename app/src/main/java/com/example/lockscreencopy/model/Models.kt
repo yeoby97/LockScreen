@@ -133,10 +133,23 @@ data class AiSketchWidget(
 )
 
 /**
+ * 위젯 공간 내부에서 멤버 위젯 하나의 배치 정보.
+ * [offset]은 공간 캔버스(dp) 기준 좌상단 좌표이며, 스케일은 위젯 기본 크기에 곱해진다.
+ * 잠금화면 자유 배치 좌표(위젯 자체의 offset/scale)와는 독립적이라, 공간에서 빼면
+ * 원래 잠금화면 위치로 그대로 복귀한다.
+ */
+data class SpaceItemLayout(
+    val offset: Offset,
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
+)
+
+/**
  * 여러 위젯을 하나로 묶어 보관하는 "위젯 공간".
  *
  * 홈스크린의 앱 폴더처럼, 잠금화면에서는 작은 투명(유리/비눗방울) 버블로 표시되고
- * 탭하면 확장되어 내부 위젯들을 원래 크기로 관찰할 수 있다.
+ * 탭하면 확장되어 내부 위젯들을 자유롭게 배치/크기조절하며 관찰할 수 있다.
+ * 버블(접힘)에서도 [layouts]에 저장된 배치 그대로 축소되어 보인다.
  * 홈스크린 폴더와 달리 위젯이 1개만 남아도 공간은 유지되며, 삭제는 전용 버튼으로만 한다.
  */
 data class WidgetSpace(
@@ -144,6 +157,8 @@ data class WidgetSpace(
     val name: String,
     /** 접힌 버블의 위치(스케일 Box 로컬 좌표). */
     val offset: Offset,
+    /** 멤버 uid → 공간 캔버스 내 배치. */
+    val layouts: Map<String, SpaceItemLayout> = emptyMap(),
 )
 
 data class NotificationItem(

@@ -15,12 +15,56 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.geometry.Offset
 import com.example.lockscreencopy.model.AiSketchWidget
 import com.example.lockscreencopy.model.FloatingWidget
 import com.example.lockscreencopy.model.HostedAppWidget
+import com.example.lockscreencopy.model.SpaceItemLayout
 import com.example.lockscreencopy.model.WidgetSize
 import com.example.lockscreencopy.ui.widget.AiSketchStatic
 import com.example.lockscreencopy.ui.widget.WidgetCell
+
+/** 위젯 공간의 가상 캔버스 크기(dp). 확장 뷰·버블 모두 이 좌표계를 공유한다. */
+object SpaceCanvas {
+    const val WIDTH_DP = 300f
+    const val HEIGHT_DP = 440f
+}
+
+/** 멤버 위젯의 기본(스케일 1) 크기를 dp 로 반환. Hosted 는 px→dp 변환에 [densityScale] 사용. */
+fun SpaceMember.baseSizeDp(densityScale: Float): Pair<Float, Float> = when (this) {
+    is SpaceMember.Floating ->
+        (if (widget.widget.size == WidgetSize.WIDE) 180f else 100f) to 100f
+    is SpaceMember.Ai -> widget.widthDp to widget.heightDp
+    is SpaceMember.Hosted -> (widget.widthPx / densityScale) to (widget.heightPx / densityScale)
+}
+
+/**
+ * 공간 캔버스(dp 좌표계) 안에서 멤버 리사이즈. 잠금화면 ResizeMath 와 동일한 방식
+ * (앵커 기준 스케일 증감 + 반대편 고정)을 dp 단위로 적용한다.
+ */
+fun resizeSpaceItem(
+    layout: SpaceItemLayout,
+    baseWidthDp: Float,
+    baseHeightDp: Float,
+    deltaScaleX: Float,
+    deltaScaleY: Float,
+    anchorX: Float,
+    anchorY: Float,
+): SpaceItemLayout {
+    val minSX = (60f / baseWidthDp).coerceIn(0.2f, 1f)
+    val minSY = (60f / baseHeightDp).coerceIn(0.2f, 1f)
+    val newSX = (layout.scaleX + deltaScaleX).coerceIn(minSX, 3f)
+    val newSY = (layout.scaleY + deltaScaleY).coerceIn(minSY, 3f)
+    val realDX = newSX - layout.scaleX
+    val realDY = newSY - layout.scaleY
+    val dwDp = baseWidthDp * realDX
+    val dhDp = baseHeightDp * realDY
+    return layout.copy(
+        scaleX = newSX,
+        scaleY = newSY,
+        offset = Offset(layout.offset.x - dwDp * anchorX, layout.offset.y - dhDp * anchorY),
+    )
+}
 
 /**
  * 위젯 공간에 담길 수 있는 멤버. 잠금화면 위 세 종류 위젯을 하나의 타입으로 추상화한다.

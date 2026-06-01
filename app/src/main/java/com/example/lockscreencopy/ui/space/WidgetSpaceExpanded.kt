@@ -8,22 +8,19 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -39,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -69,6 +67,8 @@ fun WidgetSpaceExpanded(
     onDelete: () -> Unit,
     onRename: (String) -> Unit,
     onRemoveMember: (String) -> Unit,
+    onDragMember: (String, Offset) -> Unit,
+    onResizeMember: (String, Float, Float, Float, Float) -> Unit,
     onAddWidgets: () -> Unit,
 ) {
     BackHandler { onClose() }
@@ -149,67 +149,39 @@ fun WidgetSpaceExpanded(
 
             Spacer(Modifier.size(14.dp))
 
-            if (members.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (members.isEmpty()) {
                     Text(
                         "이 공간에 위젯이 없습니다.",
                         color = Color.White.copy(alpha = 0.7f),
                         fontSize = 14.sp,
                     )
-                }
-            } else {
-                Column(
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    members.forEach { member ->
-                        // 종횡비를 유지하되 너무 길어지지 않도록 높이 제한
-                        val aspect = (member.aspectW / member.aspectH).coerceIn(0.5f, 3f)
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .aspectRatio(aspect)
-                                    .heightIn(max = 220.dp)
-                                    .clip(RoundedCornerShape(18.dp)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                SpaceMemberView(
-                                    member = member,
-                                    appWidgetHost = appWidgetHost,
-                                    compact = false,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                            }
-                            if (isFloating) {
-                                // 공간에서 빼기 — 잠금화면 원래 자리로 복귀
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .offset(x = 4.dp, y = (-4).dp)
-                                        .size(26.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFFFF453A))
-                                        .clickable { onRemoveMember(member.uid) },
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Close,
-                                        contentDescription = "공간에서 빼기",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(14.dp),
-                                    )
-                                }
-                            }
-                        }
+                } else {
+                    BoxWithConstraints(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        // 캔버스를 가용 영역에 맞춤(종횡비 유지). 핸들 여유로 살짝 축소.
+                        val scale = minOf(
+                            maxWidth.value / SpaceCanvas.WIDTH_DP,
+                            maxHeight.value / SpaceCanvas.HEIGHT_DP,
+                        ) * 0.94f
+                        SpaceCanvasView(
+                            members = members,
+                            layouts = space.layouts,
+                            appWidgetHost = appWidgetHost,
+                            displayScale = scale,
+                            interactive = isFloating,
+                            compactContent = false,
+                            showFrame = true,
+                            onDragMember = onDragMember,
+                            onResizeMember = onResizeMember,
+                            onRemoveMember = onRemoveMember,
+                        )
                     }
-                    Spacer(Modifier.size(4.dp))
                 }
             }
 
