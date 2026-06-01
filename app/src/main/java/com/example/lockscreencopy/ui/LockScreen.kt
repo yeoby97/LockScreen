@@ -244,6 +244,8 @@ fun LockScreen(
     // 위젯 공간(여러 위젯을 묶는 유리 버블)
     var widgetSpaces by remember { mutableStateOf<List<WidgetSpace>>(emptyList()) }
     var spaceSketchMode by remember { mutableStateOf(false) }
+    // null = 새 공간 생성, 그 외 = 해당 공간에 위젯 추가
+    var spaceSketchTargetId by remember { mutableStateOf<String?>(null) }
     var expandedSpaceId by remember { mutableStateOf<String?>(null) }
     var spaceCounter by remember { mutableStateOf(0) }
 
@@ -579,15 +581,13 @@ fun LockScreen(
         aiSketchWidgets.filter { it.spaceId == spaceId }.forEach { add(SpaceMember.Ai(it)) }
     }
 
-    fun createSpaceFromRect(screenRect: Rect) {
-        val local = screenRectToLocal(screenRect)
+    // 영역에 겹친 자유 위젯들을 공간 [id]에 편입. 편입된 uid 집합 반환.
+    fun assignFreeWidgetsToSpace(local: Rect, id: String): Boolean {
         val fIds = floatingWidgets.filter { it.spaceId == null && floatingRect(it).overlaps(local) }.map { it.uid }.toSet()
         val hIds = hostedWidgets.filter { it.spaceId == null && hostedRect(it).overlaps(local) }.map { it.uid }.toSet()
         val aIds = aiSketchWidgets.filter { it.spaceId == null && aiRect(it).overlaps(local) }.map { it.uid }.toSet()
-        if (fIds.isEmpty() && hIds.isEmpty() && aIds.isEmpty()) return
+        if (fIds.isEmpty() && hIds.isEmpty() && aIds.isEmpty()) return false
 
-        spaceCounter++
-        val id = "space_$spaceCounter"
         if (fIds.isNotEmpty()) {
             floatingWidgets = floatingWidgets.map { if (it.uid in fIds) it.copy(spaceId = id) else it }
         }
@@ -599,13 +599,42 @@ fun LockScreen(
                 if (hostedWidgets[i].uid in hIds) hostedWidgets[i] = hostedWidgets[i].copy(spaceId = id)
             }
         }
+        return true
+    }
 
-        // 버블은 그려진 영역(로컬 좌표) 중심에 놓는다
-        val bubblePx = with(density) { 104.dp.toPx() }
-        val cx = (local.left + local.right) / 2f - bubblePx / 2f
-        val cy = (local.top + local.bottom) / 2f - bubblePx / 2f
-        widgetSpaces = widgetSpaces + WidgetSpace(id = id, name = "공간 $spaceCounter", offset = Offset(cx, cy))
+    // 스케치 확정: target이 있으면 그 공간에 담고, 없으면 새 공간 생성
+    fun confirmSpaceSketch(screenRect: Rect, targetId: String?) {
+        val local = screenRectToLocal(screenRect)
+        if (targetId != null) {
+            assignFreeWidgetsToSpace(local, targetId)
+        } else {
+            spaceCounter++
+            val id = "space_$spaceCounter"
+            if (!assignFreeWidgetsToSpace(local, id)) {
+                spaceCounter--
+                return
+            }
+            // 버블은 그려진 영역(로컬 좌표) 중심에 놓는다
+            val bubblePx = with(density) { 104.dp.toPx() }
+            val cx = (local.left + local.right) / 2f - bubblePx / 2f
+            val cy = (local.top + local.bottom) / 2f - bubblePx / 2f
+            widgetSpaces = widgetSpaces + WidgetSpace(id = id, name = "공간 $spaceCounter", offset = Offset(cx, cy))
+        }
         spaceSketchMode = false
+        spaceSketchTargetId = null
+    }
+
+    fun renameSpace(id: String, name: String) {
+        widgetSpaces = widgetSpaces.map { if (it.id == id) it.copy(name = name) else it }
+    }
+
+    // 멤버 위젯 1개를 공간에서 빼 잠금화면 자유 배치로 복귀(원래 위치 유지)
+    fun removeMemberFromSpace(uid: String) {
+        floatingWidgets = floatingWidgets.map { if (it.uid == uid) it.copy(spaceId = null) else it }
+        aiSketchWidgets = aiSketchWidgets.map { if (it.uid == uid) it.copy(spaceId = null) else it }
+        for (i in hostedWidgets.indices) {
+            if (hostedWidgets[i].uid == uid) hostedWidgets[i] = hostedWidgets[i].copy(spaceId = null)
+        }
     }
 
     // 공간 삭제: 멤버 위젯들은 잠금화면 자유 배치로 되돌리고(원래 위치 유지) 버블만 제거
@@ -1136,7 +1165,7 @@ fun LockScreen(
         // 위젯 공간 만들기 — 편집(float) 모드에서만 스케치 진입
         if (isFloating && !spaceSketchMode && expandedSpaceId == null) {
             FloatingActionButton(
-                onClick = { spaceSketchMode = true },
+                onClick = { spaceSketchTargetId = null; spaceSketchMode = true },
                 containerColor = Color(0xFF7AC0FF),
                 contentColor = Color.White,
                 shape = CircleShape,
@@ -1284,12 +1313,13 @@ fun LockScreen(
             )
         }
 
-        // 위젯 공간 만들기 — 영역 스케치 오버레이 (float 모드에서 진입)
+        // 위젯 공간 만들기/추가 — 영역 스케치 오버레이 (float 모드에서 진입)
         if (spaceSketchMode) {
             SpaceSketchOverlay(
                 countInRect = { screenRect -> freeWidgetsInRect(screenRect) },
-                onCancel = { spaceSketchMode = false },
-                onConfirm = { screenRect -> createSpaceFromRect(screenRect) },
+                onCancel = { spaceSketchMode = false; spaceSketchTargetId = null },
+                onConfirm = { screenRect -> confirmSpaceSketch(screenRect, spaceSketchTargetId) },
+                addMode = spaceSketchTargetId != null,
             )
         }
 
@@ -1304,6 +1334,13 @@ fun LockScreen(
                     isFloating = isFloating,
                     onClose = { expandedSpaceId = null },
                     onDelete = { deleteSpace(sid) },
+                    onRename = { newName -> renameSpace(sid, newName) },
+                    onRemoveMember = { uid -> removeMemberFromSpace(uid) },
+                    onAddWidgets = {
+                        expandedSpaceId = null
+                        spaceSketchTargetId = sid
+                        spaceSketchMode = true
+                    },
                 )
             }
         }

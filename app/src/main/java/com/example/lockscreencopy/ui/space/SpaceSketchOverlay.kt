@@ -55,6 +55,7 @@ fun SpaceSketchOverlay(
     countInRect: (Rect) -> Int,
     onCancel: () -> Unit,
     onConfirm: (Rect) -> Unit,
+    addMode: Boolean = false,
 ) {
     var dragStart by remember { mutableStateOf<Offset?>(null) }
     var dragCurrent by remember { mutableStateOf<Offset?>(null) }
@@ -107,10 +108,10 @@ fun SpaceSketchOverlay(
     ) {
         if (rect == null) {
             Text(
-                text = if (dragStart == null) {
-                    "묶을 위젯들을 감싸도록 영역을 드래그하세요"
-                } else {
-                    "드래그 중..."
+                text = when {
+                    dragStart != null -> "드래그 중..."
+                    addMode -> "이 공간에 담을 위젯들을 감싸도록 드래그하세요"
+                    else -> "묶을 위젯들을 감싸도록 영역을 드래그하세요"
                 },
                 color = Color.White,
                 fontSize = 15.sp,
@@ -169,10 +170,10 @@ fun SpaceSketchOverlay(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    text = if (count > 0) {
-                        "이 영역의 위젯 ${count}개로 공간을 만들까요?"
-                    } else {
-                        "영역 안에 위젯이 없어요. 다시 그려보세요."
+                    text = when {
+                        count == 0 -> "영역 안에 담을 위젯이 없어요. 다시 그려보세요."
+                        addMode -> "이 영역의 위젯 ${count}개를 공간에 담을까요?"
+                        else -> "이 영역의 위젯 ${count}개로 공간을 만들까요?"
                     },
                     color = Color.White,
                     fontSize = 15.sp,
@@ -188,7 +189,7 @@ fun SpaceSketchOverlay(
                         enabled = count > 0,
                         modifier = Modifier.defaultMinSize(minWidth = 96.dp),
                     ) {
-                        Text("만들기", fontWeight = FontWeight.SemiBold)
+                        Text(if (addMode) "담기" else "만들기", fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
