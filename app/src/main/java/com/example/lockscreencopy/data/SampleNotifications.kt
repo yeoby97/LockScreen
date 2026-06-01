@@ -1,6 +1,27 @@
 package com.example.lockscreencopy.data
 
 import com.example.lockscreencopy.model.NotificationItem
+import java.time.DayOfWeek
+import java.time.ZonedDateTime
+import java.time.temporal.TemporalAdjusters
+
+/** 데모용: 다가오는 [day] 요일 [hour]시 정각의 epoch millis (항상 미래로). */
+private fun nextDayAt(day: DayOfWeek, hour: Int): Long {
+    val now = ZonedDateTime.now()
+    var t = now.with(TemporalAdjusters.nextOrSame(day))
+        .withHour(hour).withMinute(0).withSecond(0).withNano(0)
+    if (!t.isAfter(now)) t = t.plusWeeks(1)
+    return t.toInstant().toEpochMilli()
+}
+
+/** 데모용: 다가오는 [month]월 [day]일 [hour]시의 epoch millis (지났으면 내년). */
+private fun nextDateAt(month: Int, day: Int, hour: Int): Long {
+    val now = ZonedDateTime.now()
+    var t = now.withMonth(month).withDayOfMonth(day)
+        .withHour(hour).withMinute(0).withSecond(0).withNano(0)
+    if (!t.isAfter(now)) t = t.plusYears(1)
+    return t.toInstant().toEpochMilli()
+}
 
 fun sampleNotifications(): List<NotificationItem> = listOf(
     NotificationItem(
@@ -12,6 +33,8 @@ fun sampleNotifications(): List<NotificationItem> = listOf(
         hasNudge = true,
         nudgeLabel = "일정 추가",
         nudgeActions = listOf("일정 추가", "지도 열기"),
+        mapQuery = "강남역 신상 한우집",
+        eventStartMillis = nextDayAt(DayOfWeek.SATURDAY, 18),
     ),
     NotificationItem(
         id = "notif_2",
@@ -21,7 +44,9 @@ fun sampleNotifications(): List<NotificationItem> = listOf(
         timeLabel = "3분 전",
         hasNudge = true,
         nudgeLabel = "일정 추가",
-        nudgeActions = listOf("일정 추가"),
+        nudgeActions = listOf("일정 추가", "지도 열기"),
+        mapQuery = "판교 스타벅스",
+        eventStartMillis = nextDayAt(DayOfWeek.TUESDAY, 19),
     ),
     NotificationItem(
         id = "notif_3",
@@ -40,5 +65,6 @@ fun sampleNotifications(): List<NotificationItem> = listOf(
         hasNudge = true,
         nudgeLabel = "일정 추가",
         nudgeActions = listOf("일정 추가"),
+        eventStartMillis = nextDateAt(7, 14, 9),
     ),
 )

@@ -22,13 +22,13 @@ class LockNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         Log.i(TAG, "리스너 연결됨. API 키 설정=${NudgeAnalyzer.hasApiKey()}")
-        val items = try {
-            activeNotifications.mapNotNull { it.toItem() }
+        val pairs = try {
+            activeNotifications.mapNotNull { sbn -> sbn.toItem()?.let { it to sbn.postTime } }
         } catch (_: Exception) {
             emptyList()
         }
-        NotificationRepository.reset(items)
-        items.forEach { refineNudge(it) }
+        NotificationRepository.reset(pairs.map { it.first })
+        pairs.forEach { (item, postMillis) -> refineNudge(item, postMillis) }
     }
 
     override fun onListenerDisconnected() {

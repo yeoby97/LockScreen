@@ -137,4 +137,6 @@ data class NotificationItem(
     val nudgeActions: List<String> = emptyList(),
     /** 지도 검색에 사용할 정제된 장소명. AI가 발신자명/잡설을 제외하고 추출한다. */
     val mapQuery: String = "",
+    /** AI가 예측한 일정 시작 시각(epoch millis). 0이면 시간 미상. */
+    val eventStartMillis: Long = 0L,
 )

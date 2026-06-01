@@ -2,6 +2,10 @@ package com.example.lockscreencopy.data
 
 import android.util.Log
 import com.example.lockscreencopy.BuildConfig
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -18,6 +22,8 @@ data class NudgeResult(
     val actions: List<String>,
     /** 지도 검색용 정제된 장소명. 없으면 빈 문자열. */
     val mapQuery: String = "",
+    /** 예측된 일정 시작 시각(epoch millis). 알 수 없으면 0. */
+    val eventStartMillis: Long = 0L,
 ) {
     companion object {
         val NONE = NudgeResult(hasNudge = false, nudgeLabel = "", actions = emptyList())
@@ -84,6 +90,13 @@ object NudgeAnalyzer {
         방문을 제안하면 그 자체로 행동(지도 열기)이므로 important=true 로 본다.
           (예: "김밥천국 갑시다" → important=true, label="지도 열기",
                actions=["지도 열기"], mapQuery="김밥천국")
+
+        - startIso: 일정 시작 일시를 ISO 8601(타임존 포함, 예 "2026-06-01T18:00:00+09:00")로 계산.
+          사용자 메시지와 함께 주어지는 "현재 시각"을 기준으로 삼는다.
+          상대 표현("2시간 뒤","30분 후","내일")과 절대 표현("토요일 저녁 6시","6월 3일 3시")을
+          모두 현재 시각 기준의 구체적 일시로 변환한다. 시간을 알 수 없으면 "".
+          (현재 "2026-06-01T10:00:00+09:00"일 때 "2시간 뒤 보자" → "2026-06-01T12:00:00+09:00")
+          (현재 평일일 때 "이번 토요일 저녁 6시" → 다가오는 토요일 18:00)
     """.trimIndent()
 
     /**
@@ -100,14 +113,14 @@ object NudgeAnalyzer {
      * 메시지를 의미 분석해 넛지 결과를 반환한다. 키가 없거나 호출이 실패하면
      * 넛지를 표시하지 않는다([NudgeResult.NONE]) — 정규식 폴백은 사용하지 않는다.
      */
-    suspend fun analyze(title: String, body: String): NudgeResult {
+    suspend fun analyze(title: String, body: String, nowMillis: Long = System.currentTimeMillis()): NudgeResult {
         Log.i(TAG, "분석 시작: title='$title' body='$body' (apiKey 길이=${apiKey.length})")
         if (apiKey.isBlank()) {
             Log.w(TAG, "GEMINI_API_KEY 미설정 — local.properties에 GEMINI_API_KEY를 넣고 다시 빌드하세요. (넛지 없음)")
             return NudgeResult.NONE
         }
         return withContext(Dispatchers.IO) {
-            runCatching { requestGemini(title, body) }
+            runCatching { requestGemini(title, body, nowMillis) }
                 .onSuccess { Log.i(TAG, "분석 결과: $it") }
                 .getOrElse {
                     Log.w(TAG, "Gemini 분석 실패, 넛지 없음으로 처리", it)
@@ -116,8 +129,9 @@ object NudgeAnalyzer {
         }
     }
 
-    private fun requestGemini(title: String, body: String): NudgeResult {
-        val userText = "앱: (알림)\n제목: $title\n내용: $body"
+    private fun requestGemini(title: String, body: String, nowMillis: Long): NudgeResult {
+        val nowIso = OffsetDateTime.ofInstant(Instant.ofEpochMilli(nowMillis), ZoneId.systemDefault()).toString()
+        val userText = "현재 시각: $nowIso\n앱: (알림)\n제목: $title\n내용: $body"
         val payload = JSONObject().apply {
             put("systemInstruction", JSONObject().put("parts", JSONArray().put(textPart(systemPrompt))))
             put("contents", JSONArray().put(JSONObject().put("parts", JSONArray().put(textPart(userText)))))
@@ -155,8 +169,9 @@ object NudgeAnalyzer {
                 put("items", JSONObject().put("type", "STRING"))
             })
             put("mapQuery", JSONObject().put("type", "STRING"))
+            put("startIso", JSONObject().put("type", "STRING"))
         })
-        put("required", JSONArray().put("important").put("label").put("actions").put("mapQuery"))
+        put("required", JSONArray().put("important").put("label").put("actions").put("mapQuery").put("startIso"))
     }
 
     private fun parseResult(responseBody: String): NudgeResult {
@@ -175,6 +190,7 @@ object NudgeAnalyzer {
             (0 until arr.length()).map { arr.getString(it) }
         }.orEmpty()
         val mapQuery = obj.optString("mapQuery", "")
+        val eventStartMillis = parseIsoToMillis(obj.optString("startIso", ""))
 
         // 액션이 비면 넛지로 보지 않는다.
         if (actions.isEmpty() && label.isBlank()) return NudgeResult.NONE
@@ -183,6 +199,17 @@ object NudgeAnalyzer {
             nudgeLabel = label.ifBlank { actions.first() },
             actions = actions.ifEmpty { listOf(label) },
             mapQuery = mapQuery,
+            eventStartMillis = eventStartMillis,
         )
+    }
+
+    /** ISO 8601 문자열을 epoch millis로 변환. 실패/빈 값이면 0. */
+    private fun parseIsoToMillis(iso: String): Long {
+        if (iso.isBlank()) return 0L
+        return runCatching { OffsetDateTime.parse(iso).toInstant().toEpochMilli() }
+            .recoverCatching {
+                LocalDateTime.parse(iso).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            }
+            .getOrDefault(0L)
     }
 }
