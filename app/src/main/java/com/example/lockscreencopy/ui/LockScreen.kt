@@ -878,7 +878,7 @@ fun LockScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(top = notifTopPadding, horizontal = 16.dp),
+                        .padding(top = notifTopPadding, start = 16.dp, end = 16.dp),
                 ) {
                     val onNudgeAction: (String, String, ChatMessage) -> Unit =
                         { action, roomName, message ->
