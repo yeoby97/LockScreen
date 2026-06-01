@@ -92,13 +92,14 @@ import com.example.lockscreencopy.data.NotificationRepository
 import com.example.lockscreencopy.data.isNotificationListenerEnabled
 import com.example.lockscreencopy.data.openNotificationListenerSettings
 import com.example.lockscreencopy.data.openUsageAccessSettings
-import com.example.lockscreencopy.data.executeNudgeAction
-import com.example.lockscreencopy.data.sampleNotifications
+import com.example.lockscreencopy.data.executeChatNudgeAction
+import com.example.lockscreencopy.data.sampleChats
+import com.example.lockscreencopy.data.toAppGroups
 import com.example.lockscreencopy.data.topUsedAppsWithGap
 import com.example.lockscreencopy.model.AiSketchWidget
-import com.example.lockscreencopy.model.NotificationItem
+import com.example.lockscreencopy.model.ChatMessage
+import com.example.lockscreencopy.ui.notification.ChatNotificationStack
 import com.example.lockscreencopy.ui.notification.NotificationPermissionBanner
-import com.example.lockscreencopy.ui.notification.NudgeNotificationDisplay
 import com.example.lockscreencopy.ui.llm.GhostInstance
 import com.example.lockscreencopy.ui.llm.LlmAppStrip
 import com.example.lockscreencopy.ui.llm.LlmRealWidgetGhost
@@ -163,7 +164,7 @@ fun LockScreen(
     var showRealWidgetPicker by remember { mutableStateOf(false) }
 
     val realNotifications by NotificationRepository.notifications.collectAsState()
-    val dummyNotifications = remember { sampleNotifications() }
+    val dummyChatGroups = remember { sampleChats() }
     var notificationMode by remember { mutableStateOf(NotificationMode.DUMMY) }
 
     var hasNotificationPermission by remember { mutableStateOf(isNotificationListenerEnabled(context)) }
@@ -879,23 +880,25 @@ fun LockScreen(
                         .fillMaxSize()
                         .padding(top = notifTopPadding, horizontal = 16.dp),
                 ) {
-                    val onNudgeAction: (String, NotificationItem) -> Unit =
-                        { action, item -> executeNudgeAction(context, action, item) }
+                    val onNudgeAction: (String, String, ChatMessage) -> Unit =
+                        { action, roomName, message ->
+                            executeChatNudgeAction(context, action, roomName, message)
+                        }
                     when (notificationMode) {
-                        NotificationMode.DUMMY -> NudgeNotificationDisplay(
-                            notifications = dummyNotifications,
+                        NotificationMode.DUMMY -> ChatNotificationStack(
+                            appGroups = dummyChatGroups,
                             modifier = Modifier.fillMaxWidth(),
-                            onActionClick = onNudgeAction,
+                            onNudgeAction = onNudgeAction,
                         )
                         NotificationMode.REAL -> if (!hasNotificationPermission) {
                             NotificationPermissionBanner(
                                 onOpenSettings = { openNotificationListenerSettings(context) },
                             )
                         } else {
-                            NudgeNotificationDisplay(
-                                notifications = realNotifications,
+                            ChatNotificationStack(
+                                appGroups = realNotifications.toAppGroups(),
                                 modifier = Modifier.fillMaxWidth(),
-                                onActionClick = onNudgeAction,
+                                onNudgeAction = onNudgeAction,
                             )
                         }
                         NotificationMode.NONE -> Unit

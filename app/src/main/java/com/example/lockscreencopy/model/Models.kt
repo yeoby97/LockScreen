@@ -140,3 +140,46 @@ data class NotificationItem(
     /** AI가 예측한 일정 시작 시각(epoch millis). 0이면 시간 미상. */
     val eventStartMillis: Long = 0L,
 )
+
+// ───────────────────────────────────────────────────────────────
+//  갤럭시식 알림: 앱 → 채팅방 → 메시지 계층 구조
+// ───────────────────────────────────────────────────────────────
+
+/** 메시지 한 줄에 대해 AI가 예측한 행동(넛지). */
+data class MessageNudge(
+    val label: String,                  // "일정 추가" | "지도 열기"
+    val actions: List<String>,
+    val mapQuery: String = "",          // 지도 검색용 정제 장소명
+    val eventStartMillis: Long = 0L,    // 일정 시작 시각. 0이면 미상
+)
+
+/** 채팅방 안에서 쌓인 메시지 한 줄. [nudge]가 null이 아니면 행동 예측된 메시지. */
+data class ChatMessage(
+    val id: String,
+    val sender: String,                 // 방 안 발신자 이름 (없으면 빈 문자열)
+    val text: String,
+    val timeLabel: String,
+    val nudge: MessageNudge? = null,
+)
+
+/** 같은 대화방에서 쌓인 안읽은 메시지 묶음. */
+data class ChatRoom(
+    val id: String,
+    val roomName: String,               // 방 이름(단톡방 제목) 또는 상대 이름
+    val appName: String,
+    val messages: List<ChatMessage>,    // 오래된 → 최신 순
+) {
+    val latest: ChatMessage? get() = messages.lastOrNull()
+    val messageCount: Int get() = messages.size
+    val nudgeCount: Int get() = messages.count { it.nudge != null }
+}
+
+/** 같은 앱에서 온 채팅방들의 묶음. 잠금화면에서 겹침 스택 1개 단위. */
+data class AppNotificationGroup(
+    val appName: String,
+    val rooms: List<ChatRoom>,          // 최신 방이 앞(index 0)
+) {
+    val topRoom: ChatRoom? get() = rooms.firstOrNull()
+    val roomCount: Int get() = rooms.size
+    val nudgeCount: Int get() = rooms.sumOf { it.nudgeCount }
+}
