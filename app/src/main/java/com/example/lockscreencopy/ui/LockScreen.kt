@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Science
@@ -97,6 +98,7 @@ import com.example.lockscreencopy.data.sampleChats
 import com.example.lockscreencopy.data.toAppGroups
 import com.example.lockscreencopy.data.topUsedAppsWithGap
 import com.example.lockscreencopy.model.AiSketchWidget
+import com.example.lockscreencopy.model.WidgetSpace
 import com.example.lockscreencopy.model.ChatMessage
 import com.example.lockscreencopy.ui.notification.ChatNotificationStack
 import com.example.lockscreencopy.ui.notification.NotificationPermissionBanner
@@ -111,6 +113,10 @@ import com.example.lockscreencopy.ui.llm.realWidgetGhostKey
 import com.example.lockscreencopy.ui.sketch.PendingSketch
 import com.example.lockscreencopy.ui.sketch.SketchModeOverlay
 import com.example.lockscreencopy.ui.sketch.SlotAdjustOverlay
+import com.example.lockscreencopy.ui.space.SpaceMember
+import com.example.lockscreencopy.ui.space.SpaceSketchOverlay
+import com.example.lockscreencopy.ui.space.WidgetSpaceBubble
+import com.example.lockscreencopy.ui.space.WidgetSpaceExpanded
 import com.example.lockscreencopy.ui.widget.AiSketchWidgetItem
 import com.example.lockscreencopy.ui.widget.toBitmapSafe
 import com.example.lockscreencopy.ui.picker.AiActionChoice
@@ -234,6 +240,12 @@ fun LockScreen(
     var aiSketchCounter by remember { mutableStateOf(0) }
     var pendingSketchAdjust by remember { mutableStateOf<PendingSketch?>(null) }
     val sketchScope = rememberCoroutineScope()
+
+    // 위젯 공간(여러 위젯을 묶는 유리 버블)
+    var widgetSpaces by remember { mutableStateOf<List<WidgetSpace>>(emptyList()) }
+    var spaceSketchMode by remember { mutableStateOf(false) }
+    var expandedSpaceId by remember { mutableStateOf<String?>(null) }
+    var spaceCounter by remember { mutableStateOf(0) }
 
     var addCounter by remember { mutableStateOf(0) }
 
@@ -514,6 +526,99 @@ fun LockScreen(
         return Offset(rect.left, rect.top)
     }
 
+    // ── 위젯 공간(스케치 묶음) 유틸 ────────────────────────────────
+    // 스케치 오버레이는 화면(스크린) 좌표를 쓰지만 위젯은 스케일 Box 로컬 좌표에 배치되므로,
+    // 같은 변환(pivot 0.5,0.2 · scale)의 역변환으로 좌표계를 맞춘다.
+    fun screenRectToLocal(screen: Rect): Rect {
+        val pivotX = screenWidthPx * 0.5f
+        val pivotY = screenHeightPx * 0.2f
+        val s = if (scale == 0f) 1f else scale
+        fun cvt(x: Float, y: Float) = Offset(
+            pivotX + (x - pivotX) / s,
+            pivotY + (y - pivotY) / s,
+        )
+        val tl = cvt(screen.left, screen.top)
+        val br = cvt(screen.right, screen.bottom)
+        return Rect(tl.x, tl.y, br.x, br.y)
+    }
+
+    fun floatingRect(fw: FloatingWidget): Rect {
+        val w = with(density) {
+            (if (fw.widget.size == WidgetSize.WIDE) 180.dp else 100.dp).toPx()
+        } * fw.scaleX
+        val h = with(density) { 100.dp.toPx() } * fw.scaleY
+        return Rect(fw.offset.x, fw.offset.y, fw.offset.x + w, fw.offset.y + h)
+    }
+
+    fun hostedRect(hw: HostedAppWidget): Rect = Rect(
+        hw.offset.x,
+        hw.offset.y,
+        hw.offset.x + hw.widthPx * hw.scaleX,
+        hw.offset.y + hw.heightPx * hw.scaleY,
+    )
+
+    fun aiRect(w: AiSketchWidget): Rect {
+        val wp = with(density) { (w.widthDp * w.scaleX).dp.toPx() }
+        val hp = with(density) { (w.heightDp * w.scaleY).dp.toPx() }
+        return Rect(w.offset.x, w.offset.y, w.offset.x + wp, w.offset.y + hp)
+    }
+
+    // 화면 좌표 사각형에 겹치는, 아직 어느 공간에도 속하지 않은 자유 위젯 개수
+    fun freeWidgetsInRect(screenRect: Rect): Int {
+        val local = screenRectToLocal(screenRect)
+        var n = 0
+        n += floatingWidgets.count { it.spaceId == null && floatingRect(it).overlaps(local) }
+        n += hostedWidgets.count { it.spaceId == null && hostedRect(it).overlaps(local) }
+        n += aiSketchWidgets.count { it.spaceId == null && aiRect(it).overlaps(local) }
+        return n
+    }
+
+    fun membersOf(spaceId: String): List<SpaceMember> = buildList {
+        floatingWidgets.filter { it.spaceId == spaceId }.forEach { add(SpaceMember.Floating(it)) }
+        hostedWidgets.filter { it.spaceId == spaceId }.forEach { add(SpaceMember.Hosted(it)) }
+        aiSketchWidgets.filter { it.spaceId == spaceId }.forEach { add(SpaceMember.Ai(it)) }
+    }
+
+    fun createSpaceFromRect(screenRect: Rect) {
+        val local = screenRectToLocal(screenRect)
+        val fIds = floatingWidgets.filter { it.spaceId == null && floatingRect(it).overlaps(local) }.map { it.uid }.toSet()
+        val hIds = hostedWidgets.filter { it.spaceId == null && hostedRect(it).overlaps(local) }.map { it.uid }.toSet()
+        val aIds = aiSketchWidgets.filter { it.spaceId == null && aiRect(it).overlaps(local) }.map { it.uid }.toSet()
+        if (fIds.isEmpty() && hIds.isEmpty() && aIds.isEmpty()) return
+
+        spaceCounter++
+        val id = "space_$spaceCounter"
+        if (fIds.isNotEmpty()) {
+            floatingWidgets = floatingWidgets.map { if (it.uid in fIds) it.copy(spaceId = id) else it }
+        }
+        if (aIds.isNotEmpty()) {
+            aiSketchWidgets = aiSketchWidgets.map { if (it.uid in aIds) it.copy(spaceId = id) else it }
+        }
+        if (hIds.isNotEmpty()) {
+            for (i in hostedWidgets.indices) {
+                if (hostedWidgets[i].uid in hIds) hostedWidgets[i] = hostedWidgets[i].copy(spaceId = id)
+            }
+        }
+
+        // 버블은 그려진 영역(로컬 좌표) 중심에 놓는다
+        val bubblePx = with(density) { 104.dp.toPx() }
+        val cx = (local.left + local.right) / 2f - bubblePx / 2f
+        val cy = (local.top + local.bottom) / 2f - bubblePx / 2f
+        widgetSpaces = widgetSpaces + WidgetSpace(id = id, name = "공간 $spaceCounter", offset = Offset(cx, cy))
+        spaceSketchMode = false
+    }
+
+    // 공간 삭제: 멤버 위젯들은 잠금화면 자유 배치로 되돌리고(원래 위치 유지) 버블만 제거
+    fun deleteSpace(id: String) {
+        floatingWidgets = floatingWidgets.map { if (it.spaceId == id) it.copy(spaceId = null) else it }
+        aiSketchWidgets = aiSketchWidgets.map { if (it.spaceId == id) it.copy(spaceId = null) else it }
+        for (i in hostedWidgets.indices) {
+            if (hostedWidgets[i].spaceId == id) hostedWidgets[i] = hostedWidgets[i].copy(spaceId = null)
+        }
+        widgetSpaces = widgetSpaces.filter { it.id != id }
+        if (expandedSpaceId == id) expandedSpaceId = null
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Image(
             painter = painterResource(id = R.drawable.images),
@@ -672,7 +777,7 @@ fun LockScreen(
                 }
             }
 
-            floatingWidgets.forEach { placed ->
+            floatingWidgets.filter { it.spaceId == null }.forEach { placed ->
                 FloatingWidgetItem(
                     placed = placed,
                     isFloating = isFloating,
@@ -725,7 +830,7 @@ fun LockScreen(
             }
 
             // AI 스케치로 생성된 이미지 위젯 목록 표시
-            aiSketchWidgets.forEach { w ->
+            aiSketchWidgets.filter { it.spaceId == null }.forEach { w ->
                 AiSketchWidgetItem(
                     widget = w,
                     isFloating = isFloating,
@@ -846,7 +951,7 @@ fun LockScreen(
                 }
             }
 
-            hostedWidgets.forEach { hosted ->
+            hostedWidgets.filter { it.spaceId == null }.forEach { hosted ->
                 key(hosted.uid) {
                     HostedWidgetItem(
                         hosted = hosted,
@@ -871,6 +976,23 @@ fun LockScreen(
                         },
                     )
                 }
+            }
+
+            // 위젯 공간(접힌 유리 버블)
+            widgetSpaces.forEach { space ->
+                WidgetSpaceBubble(
+                    space = space,
+                    members = membersOf(space.id),
+                    appWidgetHost = appWidgetHost,
+                    isFloating = isFloating,
+                    onTap = { expandedSpaceId = space.id },
+                    onDrag = { drag ->
+                        widgetSpaces = widgetSpaces.map {
+                            if (it.id == space.id) it.copy(offset = it.offset + drag) else it
+                        }
+                    },
+                    onDelete = { deleteSpace(space.id) },
+                )
             }
 
             if (notificationMode != NotificationMode.NONE) {
@@ -1011,6 +1133,22 @@ fun LockScreen(
             )
         }
 
+        // 위젯 공간 만들기 — 편집(float) 모드에서만 스케치 진입
+        if (isFloating && !spaceSketchMode && expandedSpaceId == null) {
+            FloatingActionButton(
+                onClick = { spaceSketchMode = true },
+                containerColor = Color(0xFF7AC0FF),
+                contentColor = Color.White,
+                shape = CircleShape,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 24.dp, bottom = screenHeight * 0.38f)
+                    .graphicsLayer { alpha = editAlpha },
+            ) {
+                Icon(Icons.Filled.CreateNewFolder, contentDescription = "위젯 공간 만들기")
+            }
+        }
+
         if (showAiChooser) {
             AiActionPickerDialog(
                 onDismiss = { showAiChooser = false },
@@ -1144,6 +1282,30 @@ fun LockScreen(
                     }
                 },
             )
+        }
+
+        // 위젯 공간 만들기 — 영역 스케치 오버레이 (float 모드에서 진입)
+        if (spaceSketchMode) {
+            SpaceSketchOverlay(
+                countInRect = { screenRect -> freeWidgetsInRect(screenRect) },
+                onCancel = { spaceSketchMode = false },
+                onConfirm = { screenRect -> createSpaceFromRect(screenRect) },
+            )
+        }
+
+        // 펼쳐진 위젯 공간 보기
+        expandedSpaceId?.let { sid ->
+            val space = widgetSpaces.firstOrNull { it.id == sid }
+            if (space != null) {
+                WidgetSpaceExpanded(
+                    space = space,
+                    members = membersOf(sid),
+                    appWidgetHost = appWidgetHost,
+                    isFloating = isFloating,
+                    onClose = { expandedSpaceId = null },
+                    onDelete = { deleteSpace(sid) },
+                )
+            }
         }
     }
 }

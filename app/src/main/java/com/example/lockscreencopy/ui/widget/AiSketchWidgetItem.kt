@@ -132,6 +132,49 @@ fun AiSketchWidgetItem(
 }
 
 /**
+ * 편집 크롬(테두리/삭제/리사이즈) 없이 이미지 + 슬롯 텍스트만 채워 그리는 정적 표현.
+ * 위젯 공간(버블/확장 뷰) 안에서 AI 스케치 위젯을 미리보기로 보여줄 때 사용.
+ */
+@Composable
+fun AiSketchStatic(
+    widget: AiSketchWidget,
+    modifier: Modifier = Modifier,
+    showSlots: Boolean = true,
+) {
+    Box(modifier = modifier) {
+        if (widget.imageBitmap != null) {
+            Image(
+                bitmap = widget.imageBitmap.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFF1C1C2E).copy(alpha = 0.85f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.AutoAwesome,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.22f),
+                    modifier = Modifier.size(28.dp),
+                )
+            }
+        }
+        if (showSlots) {
+            SlotTextOverlay(
+                slots = widget.textSlots,
+                scaleX = widget.scaleX,
+                scaleY = widget.scaleY,
+            )
+        }
+    }
+}
+
+/**
  * 슬롯 좌표(0.0~1.0 비율)를 `BoxWithConstraints`로 실제 dp 로 변환해 텍스트를 배치.
  * 이미지 생성 프롬프트의 negative space 위치와 1:1 대응하도록 설계됨.
  */

@@ -34,6 +34,8 @@ data class FloatingWidget(
     val offset: Offset,
     val scaleX: Float = 1f,
     val scaleY: Float = 1f,
+    /** 소속된 위젯 공간 id. null이면 잠금화면에 자유 배치된 상태. */
+    val spaceId: String? = null,
 )
 
 data class WidgetApp(
@@ -85,6 +87,8 @@ data class HostedAppWidget(
     val offset: Offset,
     val scaleX: Float = 1f,
     val scaleY: Float = 1f,
+    /** 소속된 위젯 공간 id. null이면 잠금화면에 자유 배치된 상태. */
+    val spaceId: String? = null,
 )
 
 /** 정보 값의 출처. REAL=실제 시스템 데이터, SAMPLE=샘플/더미 값. */
@@ -124,6 +128,22 @@ data class AiSketchWidget(
     val heightDp: Float,
     val scaleX: Float = 1f,
     val scaleY: Float = 1f,
+    /** 소속된 위젯 공간 id. null이면 잠금화면에 자유 배치된 상태. */
+    val spaceId: String? = null,
+)
+
+/**
+ * 여러 위젯을 하나로 묶어 보관하는 "위젯 공간".
+ *
+ * 홈스크린의 앱 폴더처럼, 잠금화면에서는 작은 투명(유리/비눗방울) 버블로 표시되고
+ * 탭하면 확장되어 내부 위젯들을 원래 크기로 관찰할 수 있다.
+ * 홈스크린 폴더와 달리 위젯이 1개만 남아도 공간은 유지되며, 삭제는 전용 버튼으로만 한다.
+ */
+data class WidgetSpace(
+    val id: String,
+    val name: String,
+    /** 접힌 버블의 위치(스케일 Box 로컬 좌표). */
+    val offset: Offset,
 )
 
 data class NotificationItem(
