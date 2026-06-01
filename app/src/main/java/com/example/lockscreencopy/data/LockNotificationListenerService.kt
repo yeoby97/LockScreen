@@ -49,27 +49,29 @@ class LockNotificationListenerService : NotificationListenerService() {
         }
         Log.i(TAG, "알림 수신: app='${item.appName}' title='${item.title}' body='${item.body}'")
         NotificationRepository.add(item)
-        refineNudge(item)
+        refineNudge(item, sbn.postTime)
     }
 
     /**
      * 일반 알림으로 먼저 표시한 메시지를 AI로 분석해, 넛지면 결과를 채워 갱신한다.
      * 단톡방 폭주를 고려해, 값싼 1차 필터([NudgeAnalyzer.isCandidate])를 통과한
      * 메시지만 실제 분석(API 호출) 대상으로 삼는다.
+     * [postMillis]는 "2시간 뒤" 같은 상대 시각 계산의 기준이 되는 메시지 수신 시각이다.
      */
-    private fun refineNudge(item: NotificationItem) {
+    private fun refineNudge(item: NotificationItem, postMillis: Long) {
         if (!NudgeAnalyzer.isCandidate(item.title, item.body)) {
             Log.d(TAG, "1차 필터 제외(너무 짧음): title='${item.title}' body='${item.body}'")
             return
         }
         scope.launch {
-            val refined = NudgeAnalyzer.analyze(item.title, item.body)
+            val refined = NudgeAnalyzer.analyze(item.title, item.body, postMillis)
             if (refined.hasNudge != item.hasNudge ||
                 refined.nudgeLabel != item.nudgeLabel ||
                 refined.actions != item.nudgeActions ||
-                refined.mapQuery != item.mapQuery
+                refined.mapQuery != item.mapQuery ||
+                refined.eventStartMillis != item.eventStartMillis
             ) {
-                Log.i(TAG, "넛지 갱신: id=${item.id} hasNudge=${refined.hasNudge} label='${refined.nudgeLabel}' actions=${refined.actions} mapQuery='${refined.mapQuery}'")
+                Log.i(TAG, "넛지 갱신: id=${item.id} hasNudge=${refined.hasNudge} label='${refined.nudgeLabel}' actions=${refined.actions} mapQuery='${refined.mapQuery}' startMillis=${refined.eventStartMillis}")
                 NotificationRepository.updateNudge(item.id, refined)
             } else {
                 Log.d(TAG, "넛지 변경 없음: id=${item.id} (hasNudge=${refined.hasNudge})")
