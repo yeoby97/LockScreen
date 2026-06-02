@@ -16,6 +16,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import com.example.lockscreencopy.model.AiSketchWidget
 import com.example.lockscreencopy.model.FloatingWidget
 import com.example.lockscreencopy.model.HostedAppWidget
@@ -30,6 +31,35 @@ object SpaceCanvas {
     const val WIDTH_DP = 300f
     const val HEIGHT_DP = 400f
     const val ASPECT = WIDTH_DP / HEIGHT_DP
+}
+
+/** 레이아웃이 비어 있을 때의 기본 배치(가벼운 계단식). */
+internal fun defaultSpaceLayout(index: Int): SpaceItemLayout =
+    SpaceItemLayout(offset = Offset(20f + index * 16f, 20f + index * 16f))
+
+/**
+ * 현재 배치된 멤버들을 모두 감싸는 캔버스 좌표(dp) 경계. 버블이 빈 공간 없이 내용에 꽉 맞춰
+ * 보이도록 할 때 사용. 비어 있으면 전체 캔버스를 반환.
+ */
+fun contentBoundsDp(
+    members: List<SpaceMember>,
+    layouts: Map<String, SpaceItemLayout>,
+    densityScale: Float,
+): Rect {
+    if (members.isEmpty()) return Rect(0f, 0f, SpaceCanvas.WIDTH_DP, SpaceCanvas.HEIGHT_DP)
+    var minX = Float.MAX_VALUE
+    var minY = Float.MAX_VALUE
+    var maxX = -Float.MAX_VALUE
+    var maxY = -Float.MAX_VALUE
+    members.forEachIndexed { i, m ->
+        val l = layouts[m.uid] ?: defaultSpaceLayout(i)
+        val (bw, bh) = m.baseSizeDp(densityScale)
+        minX = minOf(minX, l.offset.x)
+        minY = minOf(minY, l.offset.y)
+        maxX = maxOf(maxX, l.offset.x + bw * l.scaleX)
+        maxY = maxOf(maxY, l.offset.y + bh * l.scaleY)
+    }
+    return Rect(minX, minY, maxX, maxY)
 }
 
 /** 멤버 위젯의 기본(스케일 1) 크기를 dp 로 반환. Hosted 는 px→dp 변환에 [densityScale] 사용. */

@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -58,6 +59,7 @@ fun SpaceCanvasView(
     compactContent: Boolean,
     showFrame: Boolean,
     modifier: Modifier = Modifier,
+    contentBounds: Rect? = null,
     onDragMember: (String, Offset) -> Unit = { _, _ -> },
     onResizeMember: (String, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> },
     onRemoveMember: (String) -> Unit = {},
@@ -65,11 +67,17 @@ fun SpaceCanvasView(
     val densityScale = LocalDensity.current.density
     var selectedUid by remember { mutableStateOf<String?>(null) }
 
+    // 표시 영역(뷰포트): 지정 시 그 영역만, 없으면 전체 캔버스.
+    val viewLeft = contentBounds?.left ?: 0f
+    val viewTop = contentBounds?.top ?: 0f
+    val viewW = contentBounds?.width ?: SpaceCanvas.WIDTH_DP
+    val viewH = contentBounds?.height ?: SpaceCanvas.HEIGHT_DP
+
     // 바깥 박스는 축소된 발자국(footprint)만 차지하고, 안쪽 풀사이즈 캔버스를 graphicsLayer 로 축소.
     Box(
         modifier = modifier.size(
-            width = (SpaceCanvas.WIDTH_DP * displayScale).dp,
-            height = (SpaceCanvas.HEIGHT_DP * displayScale).dp,
+            width = (viewW * displayScale).dp,
+            height = (viewH * displayScale).dp,
         ),
     ) {
         Box(
@@ -79,6 +87,9 @@ fun SpaceCanvasView(
                     scaleX = displayScale
                     scaleY = displayScale
                     transformOrigin = TransformOrigin(0f, 0f)
+                    // 뷰포트 좌상단이 footprint 좌상단(0,0)에 오도록 평행이동
+                    translationX = -viewLeft.dp.toPx() * displayScale
+                    translationY = -viewTop.dp.toPx() * displayScale
                 }
                 .then(
                     if (showFrame) Modifier
@@ -93,7 +104,7 @@ fun SpaceCanvasView(
                 ),
         ) {
             members.forEach { member ->
-                val layout = layouts[member.uid] ?: defaultLayout(members.indexOf(member))
+                val layout = layouts[member.uid] ?: defaultSpaceLayout(members.indexOf(member))
                 val (baseW, baseH) = member.baseSizeDp(densityScale)
                 val wDp = baseW * layout.scaleX
                 val hDp = baseH * layout.scaleY
@@ -146,9 +157,6 @@ fun SpaceCanvasView(
         }
     }
 }
-
-private fun defaultLayout(index: Int): SpaceItemLayout =
-    SpaceItemLayout(offset = Offset(20f + index * 16f, 20f + index * 16f))
 
 @Composable
 private fun BoxScope.RemoveBadge(onClick: () -> Unit) {
