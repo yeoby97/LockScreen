@@ -38,6 +38,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
@@ -56,6 +57,7 @@ import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.random.Random
 
 private val BubbleWidth = 104.dp
@@ -69,12 +71,18 @@ private val FloatSeeds = listOf(
     Triple(3300, 2600, 0.15f),
 )
 
-/** 물리 시뮬레이션용 위젯별 상태. dx/dy = 기본 위치 대비 추가 오프셋(dp), vx/vy = 속도(dp/s) */
+/**
+ * 위젯별 물리 상태.
+ * dx/dy = 기본 위치 대비 추가 오프셋(dp), vx/vy = 선속도(dp/s),
+ * rotation = 현재 각도(degrees), angularVel = 각속도(deg/s)
+ */
 private data class PhysicsItem(
     val dx: Float = 0f,
     val dy: Float = 0f,
     val vx: Float = 0f,
     val vy: Float = 0f,
+    val rotation: Float = 0f,
+    val angularVel: Float = 0f,
 )
 
 @Composable
@@ -90,29 +98,56 @@ fun WidgetSpaceBubble(
 ) {
     val densityScale = LocalDensity.current.density
 
-    // 멤버 수가 바뀌면 물리 상태 초기화
     var physicsItems by remember(members.size) { mutableStateOf(List(members.size) { PhysicsItem() }) }
     var physicsActive by remember { mutableStateOf(false) }
-    // 연속 탭 감지 (recomposition 없이 갱신)
+    // 버블 내용 영역의 displayScale — BoxWithConstraints 에서 캡처
+    var capturedDisplayScale by remember { mutableStateOf(1f) }
     val lastTapTimeRef = remember { LongArray(1) { 0L } }
 
-    /** 현재 속도에 랜덤 충격(impulse)을 더해 물리를 시작/재점화한다. */
-    fun kick() {
+    /**
+     * 터치 위치(px, 버블 Box 로컬 좌표)를 캔버스 dp로 변환한 뒤,
+     * 각 위젯에 방향별 충격량(impulse)과 회전 충격량(torque)을 가한다.
+     * 이미 날아가는 중에 다시 탭하면 에너지가 누적돼 더 세게 튕김.
+     */
+    fun kick(touchPx: Offset) {
+        val tx = touchPx.x / densityScale / capturedDisplayScale.coerceAtLeast(0.01f)
+        val ty = touchPx.y / densityScale / capturedDisplayScale.coerceAtLeast(0.01f)
+
         physicsItems = physicsItems.mapIndexed { i, item ->
-            val baseAngle = (i.toFloat() / members.size.coerceAtLeast(1)) * 2f * PI.toFloat()
-            val scatter = (Random.nextFloat() - 0.5f) * PI.toFloat()
-            val angle = baseAngle + scatter
-            val speed = 200f + Random.nextFloat() * 250f
-            // 이미 날아가는 중이면 속도를 더해 더 세게 튕김
+            val member = members.getOrNull(i) ?: return@mapIndexed item
+            val layout = layouts[member.uid] ?: defaultSpaceLayout(i)
+            val (baseW, baseH) = member.baseSizeDp(densityScale)
+            val wDp = baseW * layout.scaleX
+            val hDp = baseH * layout.scaleY
+
+            // 위젯 중심 (현재 물리 오프셋 포함)
+            val cx = layout.offset.x + item.dx + wDp / 2f
+            val cy = layout.offset.y + item.dy + hDp / 2f
+
+            // 터치 → 위젯 중심 방향으로 밀어내는 힘
+            val rX = cx - tx
+            val rY = cy - ty
+            val dist = sqrt(rX * rX + rY * rY).coerceAtLeast(15f)
+            val forceMag = (4500f / dist).coerceIn(250f, 900f)
+            val forceX = (rX / dist) * forceMag
+            val forceY = (rY / dist) * forceMag
+
+            // 회전 충격량: 터치가 위젯 중심 기준 얼마나 옆에 있는지
+            // 오른쪽 가장자리 터치 → normRX 크게 양수 → 시계 방향(+) 빙글
+            val normRX = ((tx - cx) / (wDp / 2f).coerceAtLeast(1f)).coerceIn(-2.5f, 2.5f)
+            val normRY = ((ty - cy) / (hDp / 2f).coerceAtLeast(1f)).coerceIn(-2.5f, 2.5f)
+            val angularImpulse = normRX * forceMag * 0.6f - normRY * forceMag * 0.2f
+
             item.copy(
-                vx = item.vx + cos(angle).toFloat() * speed,
-                vy = item.vy + sin(angle).toFloat() * speed,
+                vx = item.vx + forceX,
+                vy = item.vy + forceY,
+                angularVel = item.angularVel + angularImpulse,
             )
         }
         physicsActive = true
     }
 
-    // 물리 루프 — physicsActive 가 true 가 될 때마다 (재)시작
+    // 물리 시뮬레이션 루프 (physicsActive 가 true 로 바뀔 때마다 (재)시작)
     LaunchedEffect(physicsActive) {
         if (!physicsActive) return@LaunchedEffect
         var lastMs = withFrameMillis { it }
@@ -129,34 +164,41 @@ fun WidgetSpaceBubble(
                 val wDp = baseW * layout.scaleX
                 val hDp = baseH * layout.scaleY
 
-                // 스프링: 원래 위치(dx=0, dy=0)로 당기는 힘
+                // 위치 스프링 + 공기 저항
                 val springK = 5f
                 val ax = -springK * item.dx
                 val ay = -springK * item.dy
-
-                // 속도 갱신 + 공기 저항(지수 감쇠)
                 var newVx = (item.vx + ax * dt) * exp(-2.5f * dt)
                 var newVy = (item.vy + ay * dt) * exp(-2.5f * dt)
                 var newDx = item.dx + newVx * dt
                 var newDy = item.dy + newVy * dt
 
-                // 캔버스 벽 충돌 — 60% 탄성 반사
-                val minX = -layout.offset.x
-                val maxX = SpaceCanvas.WIDTH_DP - layout.offset.x - wDp
-                val minY = -layout.offset.y
-                val maxY = SpaceCanvas.HEIGHT_DP - layout.offset.y - hDp
+                // 벽 충돌 — 60% 탄성 반사 (클립 해제 상태이므로 약간 넉넉하게)
+                val minX = -layout.offset.x - wDp * 0.4f
+                val maxX = SpaceCanvas.WIDTH_DP - layout.offset.x - wDp * 0.6f
+                val minY = -layout.offset.y - hDp * 0.4f
+                val maxY = SpaceCanvas.HEIGHT_DP - layout.offset.y - hDp * 0.6f
                 if (newDx < minX) { newDx = minX; newVx = abs(newVx) * 0.6f }
                 if (newDx > maxX) { newDx = maxX; newVx = -abs(newVx) * 0.6f }
                 if (newDy < minY) { newDy = minY; newVy = abs(newVy) * 0.6f }
                 if (newDy > maxY) { newDy = maxY; newVy = -abs(newVy) * 0.6f }
 
-                item.copy(dx = newDx, dy = newDy, vx = newVx, vy = newVy)
+                // 각도 스프링 (0°로 복귀) + 각속도 감쇠
+                val angularSpringK = 3f
+                val angularAccel = -angularSpringK * item.rotation
+                val newAngularVel = (item.angularVel + angularAccel * dt) * exp(-3f * dt)
+                val newRotation = item.rotation + newAngularVel * dt
+
+                item.copy(
+                    dx = newDx, dy = newDy, vx = newVx, vy = newVy,
+                    rotation = newRotation, angularVel = newAngularVel,
+                )
             }
 
-            // 모두 정착하면 원위치 복귀 후 중단
             val settled = physicsItems.all {
                 abs(it.vx) < 3f && abs(it.vy) < 3f &&
-                        abs(it.dx) < 0.8f && abs(it.dy) < 0.8f
+                        abs(it.dx) < 0.8f && abs(it.dy) < 0.8f &&
+                        abs(it.angularVel) < 5f && abs(it.rotation) < 1f
             }
             if (settled) {
                 physicsItems = List(members.size) { PhysicsItem() }
@@ -176,7 +218,9 @@ fun WidgetSpaceBubble(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(SpaceCanvas.ASPECT)
-                .clip(BubbleShape)
+                // 물리 활성 중엔 clip 해제 → 위젯이 버블 밖으로 튀어나올 수 있음
+                .then(if (!physicsActive) Modifier.clip(BubbleShape) else Modifier)
+                // clip 없어도 배경/테두리는 shape 인자로 직접 그림
                 .background(
                     Brush.verticalGradient(
                         listOf(
@@ -184,6 +228,7 @@ fun WidgetSpaceBubble(
                             Color.White.copy(alpha = 0.07f),
                         ),
                     ),
+                    BubbleShape,
                 )
                 .border(1.dp, Color.White.copy(alpha = 0.5f), BubbleShape)
                 .padding(4.dp),
@@ -198,6 +243,7 @@ fun WidgetSpaceBubble(
             } else {
                 BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                     val scale = maxWidth.value / SpaceCanvas.WIDTH_DP
+                    capturedDisplayScale = scale
                     AnimatedBubbleCanvas(
                         members = members,
                         layouts = layouts,
@@ -209,23 +255,23 @@ fun WidgetSpaceBubble(
             }
 
             // 제스처 캡처 레이어
-            // - 일반 탭 → 열기
-            // - 빠른 연속 탭(450ms 내) or 길게 누르기 → 물리 시작
+            // - 첫 번째 탭 → 열기
+            // - 빠른 연속 탭(450ms 이내) or 길게 누르기 → 물리 발동 (터치 위치 전달)
             Box(
                 modifier = Modifier
                     .matchParentSize()
                     .pointerInput(space.id) {
                         detectTapGestures(
-                            onTap = {
+                            onTap = { offset ->
                                 val now = System.currentTimeMillis()
                                 if (now - lastTapTimeRef[0] < 450L) {
-                                    kick()
+                                    kick(offset)
                                 } else {
                                     onTap()
                                 }
                                 lastTapTimeRef[0] = now
                             },
-                            onLongPress = { kick() },
+                            onLongPress = { offset -> kick(offset) },
                         )
                     }
                     .pointerInput(isFloating, space.id) {
@@ -253,8 +299,9 @@ fun WidgetSpaceBubble(
 }
 
 /**
- * 버블 전용 캔버스. 평상시엔 sine 파형 둥둥 애니메이션,
- * 물리 활성 시엔 [physicsItems] 의 추가 오프셋이 더해져 벽에 튕기며 날아다닌다.
+ * 버블 전용 캔버스.
+ * 평상시: sine 파형 둥둥 애니메이션.
+ * 물리 활성 시: [physicsItems]의 오프셋·회전이 추가로 적용되어 위젯들이 튕기며 돌아간다.
  */
 @Composable
 private fun AnimatedBubbleCanvas(
@@ -315,7 +362,9 @@ private fun AnimatedBubbleCanvas(
                         x = (layout.offset.x + floatDx + physics.dx).dp,
                         y = (layout.offset.y + floatDy + physics.dy).dp,
                     )
-                    .requiredSize(width = wDp.dp, height = hDp.dp),
+                    .requiredSize(width = wDp.dp, height = hDp.dp)
+                    // 회전은 위젯 중심 기준 (TransformOrigin 기본값 = 0.5, 0.5)
+                    .graphicsLayer { rotationZ = physics.rotation },
             ) {
                 SpaceMemberView(
                     member = member,
