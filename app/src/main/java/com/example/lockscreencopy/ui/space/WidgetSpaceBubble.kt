@@ -215,7 +215,7 @@ private fun AnimatedBubbleCanvas(
                 SpaceMemberView(
                     member = member,
                     appWidgetHost = appWidgetHost,
-                    compact = true,
+                    compact = false,
                     modifier = Modifier
                         .requiredSize(width = wDp.dp, height = hDp.dp),
                 )
