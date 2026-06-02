@@ -25,11 +25,12 @@ import com.example.lockscreencopy.model.WidgetSize
 import com.example.lockscreencopy.ui.widget.AiSketchStatic
 import com.example.lockscreencopy.ui.widget.WidgetCell
 
-/** 위젯 공간의 가상 캔버스 크기(dp). 확장 뷰·버블이 같은 좌표계를 공유하며, 둘 다 이 비율로
- *  프레임을 채우므로 displayScale 만 달라도 배치가 동일하게 보인다. */
+/** 위젯 공간의 가상 캔버스 크기(dp). 확장 뷰·버블이 같은 고정 좌표계를 공유하므로,
+ *  위젯의 위치/크기 변화가 (프레임은 고정인 채) 양쪽에 1:1로 반영된다. 정사각형으로 두어
+ *  버블이 위아래로 길지 않게 한다. */
 object SpaceCanvas {
     const val WIDTH_DP = 300f
-    const val HEIGHT_DP = 400f
+    const val HEIGHT_DP = 300f
     const val ASPECT = WIDTH_DP / HEIGHT_DP
 }
 
