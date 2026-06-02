@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import com.example.lockscreencopy.model.BottomShortcut
+import com.example.lockscreencopy.ui.theme.LockTokens
 
 @Composable
 fun BottomShortcutButton(
@@ -37,15 +38,15 @@ fun BottomShortcutButton(
         modifier = Modifier
             .size(56.dp)
             .clip(CircleShape)
-            .background(Color.Black.copy(alpha = 0.35f))
-            .border(1.dp, Color.White.copy(alpha = 0.4f), CircleShape)
+            .background(LockTokens.DockBg)
+            .border(1.dp, LockTokens.Border, CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         when (shortcut) {
             null -> Icon(
                 Icons.Filled.Add, contentDescription = "추가",
-                tint = Color.White, modifier = Modifier.size(28.dp),
+                tint = LockTokens.TextSecondary, modifier = Modifier.size(26.dp),
             )
             is BottomShortcut.System -> Icon(
                 shortcut.icon, contentDescription = shortcut.label,

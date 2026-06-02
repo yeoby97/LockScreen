@@ -11,6 +11,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -33,7 +34,6 @@ import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Science
-import androidx.compose.material3.Button
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -70,6 +70,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -143,6 +144,7 @@ import com.example.lockscreencopy.ui.widget.LockStarBar
 import com.example.lockscreencopy.ui.widget.ResizeHandles
 import com.example.lockscreencopy.ui.widget.WidgetSlotRow
 import com.example.lockscreencopy.ui.theme.LockScreenCopyTheme
+import com.example.lockscreencopy.ui.theme.LockTokens
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
@@ -872,8 +874,8 @@ fun LockScreen(
                         .pointerInput(isFloating) {
                             detectTapGestures(onTap = { showShortcutPopup = true })
                         }
-                        .clip(RoundedCornerShape(30.dp))
-                        .border(2.dp, Color.LightGray, RoundedCornerShape(30.dp)),
+                        .clip(RoundedCornerShape(26.dp))
+                        .border(1.dp, LockTokens.BorderSoft, RoundedCornerShape(26.dp)),
                 ) {
                     LockStarBar()
                 }
@@ -1214,7 +1216,7 @@ fun LockScreen(
         if (!isFloating && llmSuggestion == null && !sketchMode) {
             FloatingActionButton(
                 onClick = { showAiChooser = true },
-                containerColor = Color(0xFF4DAAED),
+                containerColor = LockTokens.Accent,
                 contentColor = Color.White,
                 shape = CircleShape,
                 modifier = Modifier
@@ -1240,7 +1242,7 @@ fun LockScreen(
         if (isFloating && !spaceSketchMode && expandedSpaceId == null) {
             FloatingActionButton(
                 onClick = { spaceSketchTargetId = null; spaceSketchMode = true },
-                containerColor = Color(0xFF7AC0FF),
+                containerColor = LockTokens.Accent,
                 contentColor = Color.White,
                 shape = CircleShape,
                 modifier = Modifier
@@ -1453,8 +1455,29 @@ private fun EditModeTopBar(visible: Boolean, alpha: Float = 1f, onConfirm: () ->
         modifier = Modifier.fillMaxWidth().graphicsLayer { this.alpha = alpha },
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Button(onClick = {}, enabled = visible) { Text("배경화면") }
-        Button(onClick = onConfirm, enabled = visible) { Text("확인") }
+        EditPill(text = "배경화면", emphasized = false, enabled = visible, onClick = {})
+        EditPill(text = "확인", emphasized = true, enabled = visible, onClick = onConfirm)
+    }
+}
+
+/** One UI 잠금화면 편집 모드의 반투명 유리 pill 버튼. 벽지가 비치도록 translucent. */
+@Composable
+private fun EditPill(text: String, emphasized: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(LockTokens.ShapeXL)
+            .background(if (emphasized) LockTokens.GlassWhiteStrong else LockTokens.DockBg)
+            .border(1.dp, LockTokens.Border, LockTokens.ShapeXL)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 22.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            color = LockTokens.TextPrimary,
+            fontSize = 14.sp,
+            fontWeight = if (emphasized) FontWeight.SemiBold else FontWeight.Medium,
+        )
     }
 }
 

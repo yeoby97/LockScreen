@@ -1,6 +1,7 @@
 package com.example.lockscreencopy.ui.widget
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,13 +26,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.lockscreencopy.model.LockWidget
 import com.example.lockscreencopy.model.WidgetSize
+import com.example.lockscreencopy.ui.theme.LockTokens
+
+private val WidgetCardShape = RoundedCornerShape(18.dp)
 
 @Composable
 fun WidgetCell(widget: LockWidget, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(Color(0xFF3A3A3C)),
+            .clip(WidgetCardShape)
+            .background(LockTokens.WidgetCardBg)
+            .border(1.dp, LockTokens.WidgetCardBorder, WidgetCardShape),
         contentAlignment = Alignment.Center,
     ) {
         when (widget.size) {

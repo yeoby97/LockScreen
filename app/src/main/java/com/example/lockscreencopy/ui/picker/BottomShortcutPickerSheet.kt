@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import com.example.lockscreencopy.data.loadInstalledApps
 import com.example.lockscreencopy.data.systemShortcuts
 import com.example.lockscreencopy.model.BottomShortcut
+import com.example.lockscreencopy.ui.theme.LockTokens
 import com.example.lockscreencopy.ui.widget.toBitmapSafe
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -65,11 +66,16 @@ fun BottomShortcutPickerSheet(
         apps = withContext(Dispatchers.IO) { loadInstalledApps(context) }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = Color.White) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = LockTokens.SheetBg,
+        shape = LockTokens.SheetShape,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 20.dp)
                 .padding(bottom = 24.dp),
         ) {
             Row(
@@ -78,16 +84,21 @@ fun BottomShortcutPickerSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    "바로가기 선택", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.Black,
+                    "바로가기 선택",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = LockTokens.TextPrimary,
                     modifier = Modifier.padding(vertical = 12.dp),
                 )
                 if (onClear != null) {
-                    TextButton(onClick = onClear) { Text("제거") }
+                    TextButton(onClick = onClear) {
+                        Text("제거", color = LockTokens.Accent)
+                    }
                 }
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 TabChip("기본 기능", tab == Tab.SYSTEM) { tab = Tab.SYSTEM }
@@ -104,14 +115,14 @@ fun BottomShortcutPickerSheet(
 
 @Composable
 private fun TabChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val bg = if (selected) Color(0xFF1976D2) else Color(0xFFEEEEEE)
-    val fg = if (selected) Color.White else Color.Black
+    val bg = if (selected) LockTokens.Accent else LockTokens.GlassWhiteSoft
+    val fg = if (selected) Color.White else LockTokens.TextSecondary
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
             .background(bg)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 9.dp),
     ) {
         Text(label, color = fg, fontSize = 13.sp, fontWeight = FontWeight.Medium)
     }
@@ -131,13 +142,20 @@ private fun SystemGrid(onSelected: (BottomShortcut) -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Box(
-                    modifier = Modifier.size(56.dp).clip(CircleShape).background(Color(0xFFE0E0E0)),
+                    modifier = Modifier.size(56.dp).clip(CircleShape)
+                        .background(LockTokens.SheetSurfaceHigh),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(sc.icon, null, tint = Color(0xFF424242), modifier = Modifier.size(28.dp))
+                    Icon(sc.icon, null, tint = Color.White, modifier = Modifier.size(28.dp))
                 }
                 Spacer(modifier = Modifier.height(6.dp))
-                Text(sc.label, fontSize = 11.sp, color = Color.Black, textAlign = TextAlign.Center, maxLines = 2)
+                Text(
+                    sc.label,
+                    fontSize = 11.sp,
+                    color = LockTokens.TextSecondary,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                )
             }
         }
     }
@@ -147,7 +165,7 @@ private fun SystemGrid(onSelected: (BottomShortcut) -> Unit) {
 private fun AppsGrid(apps: List<BottomShortcut.App>, onSelected: (BottomShortcut) -> Unit) {
     if (apps.isEmpty()) {
         Box(modifier = Modifier.fillMaxWidth().height(360.dp), contentAlignment = Alignment.Center) {
-            Text("앱 목록을 불러오는 중...", color = Color.Gray)
+            Text("앱 목록을 불러오는 중...", color = LockTokens.OnSheetSecondary)
         }
         return
     }
@@ -164,16 +182,26 @@ private fun AppsGrid(apps: List<BottomShortcut.App>, onSelected: (BottomShortcut
             ) {
                 val bmp = remember(app.id) { app.drawable?.toBitmapSafe() }
                 Box(
-                    modifier = Modifier.size(56.dp).clip(CircleShape).background(Color(0xFFE0E0E0)),
+                    modifier = Modifier.size(56.dp).clip(CircleShape)
+                        .background(LockTokens.SheetSurfaceHigh),
                     contentAlignment = Alignment.Center,
                 ) {
                     if (bmp != null) {
-                        Image(bitmap = bmp.asImageBitmap(), contentDescription = app.label,
-                            modifier = Modifier.size(40.dp).clip(CircleShape))
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = app.label,
+                            modifier = Modifier.size(40.dp).clip(CircleShape),
+                        )
                     }
                 }
                 Spacer(modifier = Modifier.height(6.dp))
-                Text(app.label, fontSize = 11.sp, color = Color.Black, textAlign = TextAlign.Center, maxLines = 1)
+                Text(
+                    app.label,
+                    fontSize = 11.sp,
+                    color = LockTokens.TextSecondary,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                )
             }
         }
     }

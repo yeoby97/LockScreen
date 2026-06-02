@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.lockscreencopy.model.BottomShortcut
 import com.example.lockscreencopy.model.FavoriteAppsLayout
+import com.example.lockscreencopy.ui.theme.LockTokens
 import com.example.lockscreencopy.ui.widget.toBitmapSafe
 
 const val MAX_FAVORITES = 6
@@ -59,7 +60,8 @@ fun FavoriteAppsSettingsSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF2C2C2E),
+        containerColor = LockTokens.SheetBg,
+        shape = LockTokens.SheetShape,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 32.dp),
@@ -78,7 +80,7 @@ fun FavoriteAppsSettingsSheet(
                     onCheckedChange = onEnabledChange,
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
-                        checkedTrackColor = Color(0xFF1976D2),
+                        checkedTrackColor = LockTokens.Accent,
                         uncheckedThumbColor = Color.White,
                         uncheckedTrackColor = Color(0xFF5A5A5C),
                     ),
@@ -126,7 +128,7 @@ fun FavoriteAppsSettingsSheet(
                     onCheckedChange = onUsageSortChange,
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
-                        checkedTrackColor = Color(0xFF1976D2),
+                        checkedTrackColor = LockTokens.Accent,
                         uncheckedThumbColor = Color.White,
                         uncheckedTrackColor = Color(0xFF5A5A5C),
                     ),
@@ -202,7 +204,7 @@ private fun LayoutOption(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    val border = if (selected) Color(0xFFB39DDB) else Color.White.copy(alpha = 0.15f)
+    val border = if (selected) LockTokens.Accent else Color.White.copy(alpha = 0.15f)
     Box(
         modifier = modifier
             .height(90.dp)

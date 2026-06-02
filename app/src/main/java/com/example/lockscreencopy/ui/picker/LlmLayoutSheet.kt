@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
@@ -47,6 +48,7 @@ import com.example.lockscreencopy.data.SelectedFirstStep
 import com.example.lockscreencopy.data.buildLlmCatalog
 import com.example.lockscreencopy.data.dummyLlmCases
 import com.example.lockscreencopy.data.toSelectedFirstStep
+import com.example.lockscreencopy.ui.theme.LockTokens
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -85,7 +87,8 @@ fun LlmLayoutSheet(
     ModalBottomSheet(
         onDismissRequest = { if (!loading) onDismiss() },
         sheetState = sheetState,
-        containerColor = Color(0xFF1C1C1E),
+        containerColor = LockTokens.SheetBg,
+        shape = LockTokens.SheetShape,
     ) {
         Column(
             modifier = Modifier
@@ -226,6 +229,10 @@ fun LlmLayoutSheet(
                 Box(modifier = Modifier.padding(start = 8.dp)) {
                     Button(
                         enabled = !loading && input.isNotBlank() && catalog != null,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = LockTokens.Accent,
+                            contentColor = Color.White,
+                        ),
                         onClick = {
                             val cat = catalog ?: return@Button
                             error = null
