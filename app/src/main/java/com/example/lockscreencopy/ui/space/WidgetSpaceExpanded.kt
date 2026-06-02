@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -149,39 +150,37 @@ fun WidgetSpaceExpanded(
 
             Spacer(Modifier.size(14.dp))
 
-            Box(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (members.isEmpty()) {
+            if (members.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Text(
                         "이 공간에 위젯이 없습니다.",
                         color = Color.White.copy(alpha = 0.7f),
                         fontSize = 14.sp,
                     )
-                } else {
-                    BoxWithConstraints(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        // 캔버스를 가용 영역에 맞춤(종횡비 유지). 핸들 여유로 살짝 축소.
-                        val scale = minOf(
-                            maxWidth.value / SpaceCanvas.WIDTH_DP,
-                            maxHeight.value / SpaceCanvas.HEIGHT_DP,
-                        ) * 0.94f
-                        SpaceCanvasView(
-                            members = members,
-                            layouts = space.layouts,
-                            appWidgetHost = appWidgetHost,
-                            displayScale = scale,
-                            interactive = isFloating,
-                            compactContent = false,
-                            showFrame = true,
-                            onDragMember = onDragMember,
-                            onResizeMember = onResizeMember,
-                            onRemoveMember = onRemoveMember,
-                        )
-                    }
+                }
+            } else {
+                // 캔버스가 패널 폭을 그대로 채운다(같은 비율) → 사각형은 하나뿐, 전 영역 자유 배치.
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(SpaceCanvas.ASPECT),
+                ) {
+                    val scale = maxWidth.value / SpaceCanvas.WIDTH_DP
+                    SpaceCanvasView(
+                        members = members,
+                        layouts = space.layouts,
+                        appWidgetHost = appWidgetHost,
+                        displayScale = scale,
+                        interactive = isFloating,
+                        compactContent = false,
+                        showFrame = false,
+                        onDragMember = onDragMember,
+                        onResizeMember = onResizeMember,
+                        onRemoveMember = onRemoveMember,
+                    )
                 }
             }
 

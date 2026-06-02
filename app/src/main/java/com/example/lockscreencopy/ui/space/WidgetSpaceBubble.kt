@@ -9,12 +9,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -33,18 +34,17 @@ import androidx.compose.ui.unit.sp
 import com.example.lockscreencopy.model.SpaceItemLayout
 import com.example.lockscreencopy.model.WidgetSpace
 import com.example.lockscreencopy.ui.widget.DeleteBadge
-import kotlin.math.min
 import kotlin.math.roundToInt
 
-private val BubbleSize = 104.dp
-private val BubbleShape = RoundedCornerShape(28.dp)
+private val BubbleWidth = 100.dp
+private val BubbleShape = RoundedCornerShape(22.dp)
 
 /**
- * 접힌 위젯 공간 — 비눗방울/유리 같은 반투명 버블. 내부에는 확장 뷰와 동일한 캔버스 배치가
- * 축소되어 그대로 보인다(사용자가 공간 안에서 배치한 모양 그대로).
+ * 접힌 위젯 공간 — 캔버스 비율(세로)에 맞춘 유리 버블. 내부에는 확장 뷰와 동일한 배치가
+ * 그대로 축소되어(위젯 실제 모습 그대로) 프레임을 꽉 채운다. 이름은 폴더처럼 아래에 표시.
  *
  * - 평상시: 탭하면 [onTap] 으로 확장.
- * - float(편집) 모드: 드래그로 이동, 우상단 삭제 배지 노출. 탭하면 확장되어 내부를 편집.
+ * - float(편집) 모드: 드래그로 이동, 우상단 삭제 배지 노출.
  */
 @Composable
 fun WidgetSpaceBubble(
@@ -57,10 +57,10 @@ fun WidgetSpaceBubble(
     onDrag: (Offset) -> Unit,
     onDelete: () -> Unit,
 ) {
-    Box(
+    Column(
         modifier = Modifier
             .offset { IntOffset(space.offset.x.roundToInt(), space.offset.y.roundToInt()) }
-            .size(BubbleSize)
+            .width(BubbleWidth)
             .pointerInput(space.id) {
                 detectTapGestures(onTap = { onTap() })
             }
@@ -69,64 +69,60 @@ fun WidgetSpaceBubble(
                     change.consume(); onDrag(drag)
                 }
             },
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // 유리/비눗방울 본체: 위→아래로 옅어지는 반투명 화이트 + 외곽선
+        // 유리 본체 — 캔버스 비율로, 내부 배치가 프레임을 꽉 채움
         Box(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .aspectRatio(SpaceCanvas.ASPECT)
                 .clip(BubbleShape)
                 .background(
                     Brush.verticalGradient(
                         listOf(
-                            Color.White.copy(alpha = 0.22f),
-                            Color.White.copy(alpha = 0.08f),
+                            Color.White.copy(alpha = 0.20f),
+                            Color.White.copy(alpha = 0.07f),
                         ),
                     ),
                 )
-                .border(1.dp, Color.White.copy(alpha = 0.55f), BubbleShape)
-                .padding(7.dp),
+                .border(1.dp, Color.White.copy(alpha = 0.5f), BubbleShape)
+                .padding(4.dp),
         ) {
-            Column(Modifier.fillMaxSize()) {
-                BoxWithConstraints(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    // 캔버스를 버블 가용 영역에 맞춰 축소(종횡비 유지)
-                    val scale = min(
-                        maxWidth.value / SpaceCanvas.WIDTH_DP,
-                        maxHeight.value / SpaceCanvas.HEIGHT_DP,
-                    )
-                    if (members.isEmpty()) {
-                        Text(
-                            "빈 공간",
-                            color = Color.White.copy(alpha = 0.7f),
-                            fontSize = 10.sp,
-                        )
-                    } else {
-                        SpaceCanvasView(
-                            members = members,
-                            layouts = layouts,
-                            appWidgetHost = appWidgetHost,
-                            displayScale = scale,
-                            interactive = false,
-                            compactContent = true,
-                            showFrame = false,
-                        )
-                    }
-                }
-                Spacer(Modifier.height(3.dp))
+            if (members.isEmpty()) {
                 Text(
-                    text = space.name,
-                    color = Color.White,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth(),
+                    "빈 공간",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 10.sp,
+                    modifier = Modifier.align(Alignment.Center),
                 )
+            } else {
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    val scale = maxWidth.value / SpaceCanvas.WIDTH_DP
+                    SpaceCanvasView(
+                        members = members,
+                        layouts = layouts,
+                        appWidgetHost = appWidgetHost,
+                        displayScale = scale,
+                        interactive = false,
+                        compactContent = false,
+                        showFrame = false,
+                    )
+                }
             }
+
+            if (isFloating) DeleteBadge(onClick = onDelete)
         }
 
-        if (isFloating) DeleteBadge(onClick = onDelete)
+        Spacer(Modifier.height(3.dp))
+        Text(
+            text = space.name,
+            color = Color.White,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }

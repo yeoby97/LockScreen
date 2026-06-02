@@ -647,9 +647,10 @@ fun LockScreen(
                 return
             }
             // 버블은 그려진 영역(로컬 좌표) 중심에 놓는다
-            val bubblePx = with(density) { 104.dp.toPx() }
-            val cx = (local.left + local.right) / 2f - bubblePx / 2f
-            val cy = (local.top + local.bottom) / 2f - bubblePx / 2f
+            val bubbleWpx = with(density) { 100.dp.toPx() }
+            val bubbleHpx = with(density) { 150.dp.toPx() }
+            val cx = (local.left + local.right) / 2f - bubbleWpx / 2f
+            val cy = (local.top + local.bottom) / 2f - bubbleHpx / 2f
             widgetSpaces = widgetSpaces + WidgetSpace(
                 id = id,
                 name = "공간 $spaceCounter",
