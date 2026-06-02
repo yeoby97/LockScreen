@@ -26,6 +26,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -33,9 +35,15 @@ import com.example.lockscreencopy.model.SpaceItemLayout
 import com.example.lockscreencopy.ui.widget.ResizeHandles
 
 /**
- * 위젯 공간의 캔버스를 그린다. 멤버는 각자의 [SpaceItemLayout](캔버스 dp 좌표·스케일)대로
- * 자유 배치되며, [displayScale]만 달리하면 같은 배치를 확장 뷰(≈1)와 버블(축소) 양쪽에서
- * 동일하게 보여줄 수 있다.
+ * 위젯 공간의 캔버스를 그린다.
+ *
+ * 핵심: 멤버는 항상 "원래(풀) 크기"로 배치/렌더되고, 캔버스 전체를 [graphicsLayer] 로
+ * [displayScale] 만큼 시각적으로만 축소한다(잠금화면 메인 박스와 동일한 방식).
+ * 따라서 위젯은 작은 컨테이너에 맞춰 레이아웃을 다시 짜지(reflow) 않고, float 모드처럼
+ * 모양 그대로 스케일만 작아진다. 같은 배치를 확장 뷰(≈1)와 버블(축소)이 동일하게 보여준다.
+ *
+ * graphicsLayer 안쪽이므로 드래그/리사이즈 델타는 캔버스 로컬(풀) 좌표로 들어온다 →
+ * displayScale 로 나눌 필요 없이 그대로(px→dp만 변환) 적용한다.
  *
  * @param interactive   true면 드래그/리사이즈/선택/빼기 가능(확장 뷰). false면 표시 전용(버블).
  * @param compactContent 멤버 내용을 가볍게 그릴지(버블 썸네일). 확장 뷰는 false 로 실물 렌더링.
@@ -57,78 +65,82 @@ fun SpaceCanvasView(
     val densityScale = LocalDensity.current.density
     var selectedUid by remember { mutableStateOf<String?>(null) }
 
+    // 바깥 박스는 축소된 발자국(footprint)만 차지하고, 안쪽 풀사이즈 캔버스를 graphicsLayer 로 축소.
     Box(
-        modifier = modifier
-            .size(
-                width = (SpaceCanvas.WIDTH_DP * displayScale).dp,
-                height = (SpaceCanvas.HEIGHT_DP * displayScale).dp,
-            )
-            .then(
-                if (showFrame) Modifier
-                    .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(18.dp))
-                    .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(18.dp))
-                else Modifier,
-            )
-            // 빈 곳 탭 시 선택 해제
-            .then(
-                if (interactive) Modifier.pointerInput(Unit) {
-                    detectTapGestures(onTap = { selectedUid = null })
-                } else Modifier,
-            ),
+        modifier = modifier.size(
+            width = (SpaceCanvas.WIDTH_DP * displayScale).dp,
+            height = (SpaceCanvas.HEIGHT_DP * displayScale).dp,
+        ),
     ) {
-        members.forEach { member ->
-            val layout = layouts[member.uid] ?: defaultLayout(members.indexOf(member))
-            val (baseW, baseH) = member.baseSizeDp(densityScale)
-            val wDp = baseW * layout.scaleX * displayScale
-            val hDp = baseH * layout.scaleY * displayScale
-
-            Box(
-                modifier = Modifier
-                    .offset(
-                        x = (layout.offset.x * displayScale).dp,
-                        y = (layout.offset.y * displayScale).dp,
-                    )
-                    .size(width = wDp.dp, height = hDp.dp)
-                    .then(
-                        if (interactive) Modifier
-                            .pointerInput(member.uid) {
-                                detectTapGestures(onTap = {
-                                    selectedUid = if (selectedUid == member.uid) null else member.uid
-                                })
-                            }
-                            .pointerInput(member.uid, displayScale) {
-                                detectDragGestures { change, drag ->
-                                    change.consume()
-                                    // 화면 px → 캔버스 dp 델타로 변환
-                                    val dx = drag.x / densityScale / displayScale
-                                    val dy = drag.y / densityScale / displayScale
-                                    onDragMember(member.uid, Offset(dx, dy))
-                                }
-                            }
-                        else Modifier,
-                    ),
-            ) {
-                SpaceMemberView(
-                    member = member,
-                    appWidgetHost = appWidgetHost,
-                    compact = compactContent,
-                    modifier = Modifier.fillMaxSize(),
+        Box(
+            modifier = Modifier
+                .size(width = SpaceCanvas.WIDTH_DP.dp, height = SpaceCanvas.HEIGHT_DP.dp)
+                .graphicsLayer {
+                    scaleX = displayScale
+                    scaleY = displayScale
+                    transformOrigin = TransformOrigin(0f, 0f)
+                }
+                .then(
+                    if (showFrame) Modifier
+                        .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(18.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(18.dp))
+                    else Modifier,
                 )
+                .then(
+                    if (interactive) Modifier.pointerInput(Unit) {
+                        detectTapGestures(onTap = { selectedUid = null })
+                    } else Modifier,
+                ),
+        ) {
+            members.forEach { member ->
+                val layout = layouts[member.uid] ?: defaultLayout(members.indexOf(member))
+                val (baseW, baseH) = member.baseSizeDp(densityScale)
+                val wDp = baseW * layout.scaleX
+                val hDp = baseH * layout.scaleY
 
-                if (interactive) {
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .border(
-                                1.dp,
-                                Color.White.copy(alpha = if (selectedUid == member.uid) 0.9f else 0.5f),
-                                RoundedCornerShape(12.dp),
-                            ),
+                Box(
+                    modifier = Modifier
+                        .offset(x = layout.offset.x.dp, y = layout.offset.y.dp)
+                        .size(width = wDp.dp, height = hDp.dp),
+                ) {
+                    SpaceMemberView(
+                        member = member,
+                        appWidgetHost = appWidgetHost,
+                        compact = compactContent,
+                        modifier = Modifier.fillMaxSize(),
                     )
-                    if (selectedUid == member.uid) {
-                        ResizeHandles { dx, dy, ax, ay -> onResizeMember(member.uid, dx, dy, ax, ay) }
+
+                    if (interactive) {
+                        // 실 위젯(AndroidView)이 터치를 가로채지 못하도록 위에 투명 캡처 레이어
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .pointerInput(member.uid) {
+                                    detectTapGestures(onTap = {
+                                        selectedUid = if (selectedUid == member.uid) null else member.uid
+                                    })
+                                }
+                                .pointerInput(member.uid) {
+                                    detectDragGestures { change, drag ->
+                                        change.consume()
+                                        // graphicsLayer 로컬(풀) 좌표 → 캔버스 dp 델타
+                                        onDragMember(
+                                            member.uid,
+                                            Offset(drag.x / densityScale, drag.y / densityScale),
+                                        )
+                                    }
+                                }
+                                .border(
+                                    1.dp,
+                                    Color.White.copy(alpha = if (selectedUid == member.uid) 0.9f else 0.5f),
+                                    RoundedCornerShape(12.dp),
+                                ),
+                        )
+                        if (selectedUid == member.uid) {
+                            ResizeHandles { dx, dy, ax, ay -> onResizeMember(member.uid, dx, dy, ax, ay) }
+                        }
+                        RemoveBadge { onRemoveMember(member.uid) }
                     }
-                    RemoveBadge { onRemoveMember(member.uid) }
                 }
             }
         }

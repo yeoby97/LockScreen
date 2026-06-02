@@ -60,15 +60,7 @@ fun WidgetSpaceBubble(
     Column(
         modifier = Modifier
             .offset { IntOffset(space.offset.x.roundToInt(), space.offset.y.roundToInt()) }
-            .width(BubbleWidth)
-            .pointerInput(space.id) {
-                detectTapGestures(onTap = { onTap() })
-            }
-            .pointerInput(isFloating, space.id) {
-                if (isFloating) detectDragGestures { change, drag ->
-                    change.consume(); onDrag(drag)
-                }
-            },
+            .width(BubbleWidth),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // 유리 본체 — 캔버스 비율로, 내부 배치가 프레임을 꽉 채움
@@ -109,6 +101,21 @@ fun WidgetSpaceBubble(
                     )
                 }
             }
+
+            // 실 위젯(AndroidView)이 터치를 가로채지 못하도록 위에 투명 캡처 레이어.
+            // 탭=확장, (편집 모드)드래그=이동.
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .pointerInput(space.id) {
+                        detectTapGestures(onTap = { onTap() })
+                    }
+                    .pointerInput(isFloating, space.id) {
+                        if (isFloating) detectDragGestures { change, drag ->
+                            change.consume(); onDrag(drag)
+                        }
+                    },
+            )
 
             if (isFloating) DeleteBadge(onClick = onDelete)
         }
