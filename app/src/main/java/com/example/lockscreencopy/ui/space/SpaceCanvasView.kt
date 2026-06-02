@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -82,7 +83,8 @@ fun SpaceCanvasView(
     ) {
         Box(
             modifier = Modifier
-                .size(width = SpaceCanvas.WIDTH_DP.dp, height = SpaceCanvas.HEIGHT_DP.dp)
+                // requiredSize: 작은 footprint 의 부모 제약에 눌려 줄어들지 않도록 항상 풀사이즈로.
+                .requiredSize(width = SpaceCanvas.WIDTH_DP.dp, height = SpaceCanvas.HEIGHT_DP.dp)
                 .graphicsLayer {
                     scaleX = displayScale
                     scaleY = displayScale
@@ -112,7 +114,7 @@ fun SpaceCanvasView(
                 Box(
                     modifier = Modifier
                         .offset(x = layout.offset.x.dp, y = layout.offset.y.dp)
-                        .size(width = wDp.dp, height = hDp.dp),
+                        .requiredSize(width = wDp.dp, height = hDp.dp),
                 ) {
                     SpaceMemberView(
                         member = member,
