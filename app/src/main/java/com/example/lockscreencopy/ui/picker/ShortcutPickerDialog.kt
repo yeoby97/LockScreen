@@ -105,7 +105,7 @@ fun ShortcutPickerDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onSelect(item.choice) }
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
@@ -131,7 +131,6 @@ fun ShortcutPickerDialog(
                 }
             }
 
-            Spacer(Modifier.padding(bottom = 6.dp))
         }
     }
 }
