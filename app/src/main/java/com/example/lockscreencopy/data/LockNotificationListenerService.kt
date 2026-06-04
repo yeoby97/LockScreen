@@ -4,6 +4,7 @@ import android.app.Notification
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import com.example.lockscreencopy.model.ChatMessage
 import com.example.lockscreencopy.model.NotificationItem
 import java.util.concurrent.TimeUnit
@@ -94,7 +95,7 @@ class LockNotificationListenerService : NotificationListenerService() {
         // 채팅 앱은 MessagingStyle로 최근 안읽은 메시지들을 함께 보낸다.
         // 이를 읽어 방 하나에 여러 줄이 쌓여 보이도록 한다(더미 데이터와 동일한 모습).
         val style = runCatching {
-            Notification.MessagingStyle.extractMessagingStyleFromNotification(notification)
+            NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(notification)
         }.getOrNull()
 
         val roomName = style?.conversationTitle?.toString()?.takeIf { it.isNotBlank() }
@@ -105,7 +106,7 @@ class LockNotificationListenerService : NotificationListenerService() {
             val text = m.text?.toString()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
             ChatMessage(
                 id = "$key#${m.timestamp}",
-                sender = m.senderPerson?.name?.toString().orEmpty(),
+                sender = m.person?.name?.toString().orEmpty(),
                 text = text,
                 timeLabel = formatRelativeTime(m.timestamp),
             )
