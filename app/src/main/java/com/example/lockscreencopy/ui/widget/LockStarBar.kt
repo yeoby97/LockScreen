@@ -4,10 +4,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
@@ -32,16 +35,16 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private val BarShape = RoundedCornerShape(26.dp)
-private val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
+private val BarShape = RoundedCornerShape(24.dp)
+private val barTimeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
 
 @Composable
 fun LockStarBar(modifier: Modifier = Modifier) {
-    var currentTime by remember { mutableStateOf(timeFmt.format(Date())) }
+    var currentTime by remember { mutableStateOf(barTimeFmt.format(Date())) }
     LaunchedEffect(Unit) {
         while (true) {
             delay(30_000L)
-            currentTime = timeFmt.format(Date())
+            currentTime = barTimeFmt.format(Date())
         }
     }
 
@@ -54,30 +57,37 @@ fun LockStarBar(modifier: Modifier = Modifier) {
                 ),
             )
             .border(1.dp, Color.White.copy(alpha = 0.18f), BarShape)
-            .height(54.dp)
-            .padding(horizontal = 18.dp),
+            .height(52.dp)
+            .padding(horizontal = 14.dp),
         contentAlignment = Alignment.Center,
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(
-                text = currentTime,
-                color = Color.White,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Icon(
-                imageVector = Icons.Filled.Lock,
-                contentDescription = null,
-                tint = Color(0xFFFF4D8D),
-                modifier = Modifier.size(11.dp),
-            )
+            // 시간(위) + 자물쇠(아래) 세로 배치
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = currentTime,
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.height(1.dp))
+                Icon(
+                    imageVector = Icons.Filled.Lock,
+                    contentDescription = null,
+                    tint = Color(0xFFFF4D8D),
+                    modifier = Modifier.size(10.dp),
+                )
+            }
             Text(
                 text = "LockStar",
                 color = Color.White,
-                fontSize = 20.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
             )
         }
