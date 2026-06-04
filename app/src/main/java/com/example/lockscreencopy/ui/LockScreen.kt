@@ -72,6 +72,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -1238,30 +1239,47 @@ fun LockScreen(
             }
         }
 
+        // 편집(float) 모드 하단 버튼 Row — floating 화면 아래 빈 공간에 배치
         if (isFloating) {
-            NotificationSourceButton(
-                mode = notificationMode,
-                onCycle = { notificationMode = notificationMode.next() },
+            Row(
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 24.dp, bottom = screenHeight * 0.28f)
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = screenHeight * 0.05f)
                     .graphicsLayer { alpha = editAlpha },
-            )
-        }
-
-        // 위젯 공간 만들기 — 편집(float) 모드에서만 스케치 진입
-        if (isFloating && !spaceSketchMode && expandedSpaceId == null) {
-            FloatingActionButton(
-                onClick = { spaceSketchTargetId = null; spaceSketchMode = true },
-                containerColor = LockTokens.Accent,
-                contentColor = Color.White,
-                shape = CircleShape,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 24.dp, bottom = screenHeight * 0.38f)
-                    .graphicsLayer { alpha = editAlpha },
+                horizontalArrangement = Arrangement.spacedBy(28.dp),
+                verticalAlignment = Alignment.Top,
             ) {
-                Icon(Icons.Filled.CreateNewFolder, contentDescription = "위젯 공간 만들기")
+                if (!spaceSketchMode && expandedSpaceId == null) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        FloatingActionButton(
+                            onClick = { spaceSketchTargetId = null; spaceSketchMode = true },
+                            containerColor = LockTokens.Accent,
+                            contentColor = Color.White,
+                            shape = CircleShape,
+                            modifier = Modifier.size(42.dp),
+                        ) {
+                            Icon(
+                                Icons.Filled.CreateNewFolder,
+                                contentDescription = "위젯 공간 만들기",
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.Black.copy(alpha = 0.5f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                        ) {
+                            Text("위젯묶기", color = Color.White, fontSize = 10.sp)
+                        }
+                    }
+                }
+                NotificationSourceButton(
+                    mode = notificationMode,
+                    onCycle = { notificationMode = notificationMode.next() },
+                    fabSize = 42.dp,
+                )
             }
         }
 
@@ -1497,6 +1515,7 @@ private fun NotificationSourceButton(
     mode: NotificationMode,
     onCycle: () -> Unit,
     modifier: Modifier = Modifier,
+    fabSize: Dp = 48.dp,
 ) {
     val dummyOrange = Color(0xFFFF9500)
     val liveGreen = Color(0xFF34C759)
@@ -1517,9 +1536,9 @@ private fun NotificationSourceButton(
             containerColor = color,
             contentColor = Color.White,
             shape = CircleShape,
-            modifier = Modifier.size(48.dp),
+            modifier = Modifier.size(fabSize),
         ) {
-            Icon(icon, contentDescription = "알림 모드 전환")
+            Icon(icon, contentDescription = "알림 모드 전환", modifier = Modifier.size(20.dp))
         }
         Spacer(Modifier.height(4.dp))
         Box(
