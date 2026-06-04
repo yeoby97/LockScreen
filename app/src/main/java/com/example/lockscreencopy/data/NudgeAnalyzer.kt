@@ -33,14 +33,15 @@ data class NudgeResult(
 /**
  * 메시지 행동(넛지)을 의미 단위로 분석한다.
  *
- * 구현 메모(데모): 진짜 온디바이스 LLM(Gemini Nano)은 Z플립5 등 AICore 미지원
- * 기기에서 동작하지 않으므로, 데모 단계에서는 클라우드 Gemini API
- * (`gemini-2.5-flash-lite`, 경량·저지연 모델)를 호출한다. UI에서는 "온디바이스 AI"로
- * 표현하되, 추후 지원 기기에서 진짜 온디바이스로 교체할 수 있다.
+ * 엔진 선택: 온디바이스 Gemini Nano(ML Kit GenAI Prompt API)를 우선 사용하고,
+ * Nano를 쓸 수 없는 기기(AICore 미지원 등)에서는 클라우드 Gemini API
+ * (`gemini-2.5-flash-lite`, 경량·저지연 모델)로 폴백한다. 갤럭시 폴드7처럼 Nano가
+ * 지원되는 기기에서는 네트워크 없이 자유 프롬프트로 온디바이스 추론한다.
+ * 실제로 어떤 엔진이 쓰였는지는 [NudgeEngineStatus]로 보고되어 화면에 작게 표시된다.
  *
  * 모든 넛지 판단은 전적으로 이 AI가 담당한다(정규식/키워드 패턴 미사용).
- * 따라서 화면에 뜨는 넛지는 곧 'AI가 찾은 것'이며, 키가 없거나 호출이 실패하면
- * 넛지를 표시하지 않는다([NudgeResult.NONE]).
+ * 따라서 화면에 뜨는 넛지는 곧 'AI가 찾은 것'이며, 쓸 수 있는 엔진이 없거나 호출이
+ * 실패하면 넛지를 표시하지 않는다([NudgeResult.NONE]).
  *
  * 목적: 단톡방/오픈톡방처럼 메시지가 폭주하는 상황에서, 잡담 사이에 섞인
  * "실제 행동으로 이어질 수 있는(액션 가능)" 중요한 메시지만 넛지로 띄운다.
@@ -66,6 +67,22 @@ object NudgeAnalyzer {
 
     /** API 키 설정 여부. (키워드/길이와 무관하게 키 상태만 확인) */
     fun hasApiKey(): Boolean = apiKey.isNotBlank()
+
+    /**
+     * 현재 기기에서 어떤 엔진을 쓰게 될지 미리 확인해 [NudgeEngineStatus]에 보고한다.
+     * 첫 넛지가 도착하기 전에도 화면 표시가 채워지도록, 리스너 연결 시 호출한다.
+     */
+    suspend fun refreshEngine() {
+        val engine = withContext(Dispatchers.IO) {
+            when {
+                NanoPromptClient.checkAvailable() -> NudgeEngine.NANO
+                apiKey.isNotBlank() -> NudgeEngine.CLOUD
+                else -> NudgeEngine.NONE
+            }
+        }
+        Log.i(TAG, "엔진 확인: $engine")
+        NudgeEngineStatus.report(engine)
+    }
 
     private val systemPrompt = """
         당신은 잠금화면 알림 도우미입니다. 단체 채팅방처럼 잡담이 많은 대화 속에서
@@ -110,28 +127,80 @@ object NudgeAnalyzer {
     }
 
     /**
-     * 메시지를 의미 분석해 넛지 결과를 반환한다. 키가 없거나 호출이 실패하면
-     * 넛지를 표시하지 않는다([NudgeResult.NONE]) — 정규식 폴백은 사용하지 않는다.
+     * 메시지를 의미 분석해 넛지 결과를 반환한다.
+     *
+     * 우선순위: ① 온디바이스 Gemini Nano → ② 클라우드 Gemini API.
+     * Nano가 가능하면 자유 프롬프트로 온디바이스 추론하고, 불가능하거나 호출이 실패하면
+     * 클라우드로 폴백한다. 쓸 수 있는 엔진이 없거나 모두 실패하면 넛지를 표시하지 않는다
+     * ([NudgeResult.NONE]) — 정규식 폴백은 사용하지 않는다.
      */
-    suspend fun analyze(title: String, body: String, nowMillis: Long = System.currentTimeMillis()): NudgeResult {
-        Log.i(TAG, "분석 시작: title='$title' body='$body' (apiKey 길이=${apiKey.length})")
-        if (apiKey.isBlank()) {
-            Log.w(TAG, "GEMINI_API_KEY 미설정 — local.properties에 GEMINI_API_KEY를 넣고 다시 빌드하세요. (넛지 없음)")
-            return NudgeResult.NONE
-        }
-        return withContext(Dispatchers.IO) {
+    suspend fun analyze(title: String, body: String, nowMillis: Long = System.currentTimeMillis()): NudgeResult =
+        withContext(Dispatchers.IO) {
+            Log.i(TAG, "분석 시작: title='$title' body='$body' (apiKey 길이=${apiKey.length})")
+
+            // ① 온디바이스 Nano 우선
+            if (NanoPromptClient.checkAvailable()) {
+                val nano = runCatching { requestNano(title, body, nowMillis) }
+                    .onFailure { Log.w(TAG, "Nano 분석 실패 — 클라우드로 폴백", it) }
+                    .getOrNull()
+                if (nano != null) {
+                    NudgeEngineStatus.report(NudgeEngine.NANO)
+                    Log.i(TAG, "분석 결과(Nano): $nano")
+                    return@withContext nano
+                }
+            }
+
+            // ② 클라우드 Gemini API 폴백
+            if (apiKey.isBlank()) {
+                Log.w(TAG, "Nano 미사용 + GEMINI_API_KEY 미설정 — local.properties에 키를 넣고 다시 빌드하세요. (넛지 없음)")
+                NudgeEngineStatus.report(NudgeEngine.NONE)
+                return@withContext NudgeResult.NONE
+            }
             runCatching { requestGemini(title, body, nowMillis) }
-                .onSuccess { Log.i(TAG, "분석 결과: $it") }
+                .onSuccess {
+                    NudgeEngineStatus.report(NudgeEngine.CLOUD)
+                    Log.i(TAG, "분석 결과(Cloud): $it")
+                }
                 .getOrElse {
                     Log.w(TAG, "Gemini 분석 실패, 넛지 없음으로 처리", it)
                     NudgeResult.NONE
                 }
         }
+
+    /** Nano(온디바이스) 자유 프롬프트 추론. 결과 JSON을 파싱해 넛지로 변환한다. */
+    private suspend fun requestNano(title: String, body: String, nowMillis: Long): NudgeResult {
+        val prompt = buildNanoPrompt(title, body, nowMillis)
+        Log.i(TAG, "Nano 호출(자유 프롬프트)")
+        val raw = NanoPromptClient.generate(prompt)
+        Log.i(TAG, "Nano 응답: $raw")
+        return parseModelJson(extractJson(raw))
+    }
+
+    /** 시스템 지시 + JSON 출력 규칙 + 사용자 메시지를 하나의 자유 프롬프트로 합친다. */
+    private fun buildNanoPrompt(title: String, body: String, nowMillis: Long): String = buildString {
+        append(systemPrompt)
+        append("\n\n반드시 아래 형식의 JSON 객체 한 개만 출력하세요. 코드블록 표시(```)나 설명 문장은 절대 넣지 마세요.\n")
+        append("""{"important": true 또는 false, "label": "일정 추가 또는 지도 열기 또는 빈 문자열", "actions": ["..."], "mapQuery": "...", "startIso": "..."}""")
+        append("\n\n")
+        append(buildUserText(title, body, nowMillis))
+    }
+
+    private fun buildUserText(title: String, body: String, nowMillis: Long): String {
+        val nowIso = OffsetDateTime.ofInstant(Instant.ofEpochMilli(nowMillis), ZoneId.systemDefault()).toString()
+        return "현재 시각: $nowIso\n앱: (알림)\n제목: $title\n내용: $body"
+    }
+
+    /** 모델 출력에서 코드블록/잡설을 제거하고 JSON 본문({ … })만 잘라낸다. */
+    private fun extractJson(raw: String): String {
+        val cleaned = raw.trim()
+            .removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+        val start = cleaned.indexOf('{')
+        val end = cleaned.lastIndexOf('}')
+        return if (start >= 0 && end >= start) cleaned.substring(start, end + 1) else cleaned
     }
 
     private fun requestGemini(title: String, body: String, nowMillis: Long): NudgeResult {
-        val nowIso = OffsetDateTime.ofInstant(Instant.ofEpochMilli(nowMillis), ZoneId.systemDefault()).toString()
-        val userText = "현재 시각: $nowIso\n앱: (알림)\n제목: $title\n내용: $body"
+        val userText = buildUserText(title, body, nowMillis)
         val payload = JSONObject().apply {
             put("systemInstruction", JSONObject().put("parts", JSONArray().put(textPart(systemPrompt))))
             put("contents", JSONArray().put(JSONObject().put("parts", JSONArray().put(textPart(userText)))))
@@ -179,9 +248,13 @@ object NudgeAnalyzer {
             .getJSONArray("candidates").getJSONObject(0)
             .getJSONObject("content").getJSONArray("parts").getJSONObject(0)
             .getString("text")
+        return parseModelJson(text)
+    }
 
-        Log.i(TAG, "모델 판단 JSON: $text")
-        val obj = JSONObject(text)
+    /** 클라우드/Nano 공통: 모델이 낸 JSON 문자열을 넛지 결과로 변환한다. */
+    private fun parseModelJson(jsonText: String): NudgeResult {
+        Log.i(TAG, "모델 판단 JSON: $jsonText")
+        val obj = JSONObject(jsonText)
         val important = obj.optBoolean("important", false)
         if (!important) return NudgeResult.NONE
 

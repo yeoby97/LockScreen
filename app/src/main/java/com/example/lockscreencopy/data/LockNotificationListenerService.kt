@@ -22,6 +22,8 @@ class LockNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         Log.i(TAG, "리스너 연결됨. API 키 설정=${NudgeAnalyzer.hasApiKey()}")
+        // 첫 넛지 전에도 화면 표시(Nano/Cloud)가 채워지도록 엔진을 미리 확인한다.
+        scope.launch { NudgeAnalyzer.refreshEngine() }
         val pairs = try {
             activeNotifications.mapNotNull { sbn -> sbn.toItem()?.let { it to sbn.postTime } }
         } catch (_: Exception) {

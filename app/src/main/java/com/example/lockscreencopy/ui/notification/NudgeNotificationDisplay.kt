@@ -50,13 +50,47 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.lockscreencopy.data.NudgeEngine
 import com.example.lockscreencopy.model.NotificationItem
 
 private val nudgePurple = Color(0xFF9B78FF)
 private val nudgeCyan = Color(0xFF4FC3F7)
+private val nudgeGreen = Color(0xFF7CE38B)
 private val nudgeGradient = Brush.linearGradient(listOf(nudgePurple, nudgeCyan))
 private val cardShape = RoundedCornerShape(18.dp)
 private val chipShape = RoundedCornerShape(50)
+
+/**
+ * 넛지 분석에 현재 어떤 AI 엔진이 쓰이는지 작게 표시하는 칩.
+ * 온디바이스 Gemini Nano인지, 클라우드 Gemini API인지 한눈에 구분할 수 있다.
+ */
+@Composable
+fun NudgeEngineIndicator(engine: NudgeEngine, modifier: Modifier = Modifier) {
+    val (label, dot) = when (engine) {
+        NudgeEngine.NANO -> "온디바이스 Nano" to nudgeGreen
+        NudgeEngine.CLOUD -> "클라우드 API" to nudgeCyan
+        NudgeEngine.NONE -> "AI 꺼짐" to Color.White.copy(alpha = 0.4f)
+        NudgeEngine.UNKNOWN -> "AI 확인 중…" to Color.White.copy(alpha = 0.4f)
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .clip(chipShape)
+            .background(Color(0x66000000))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    ) {
+        Box(
+            Modifier
+                .size(6.dp)
+                .clip(chipShape)
+                .background(dot),
+        )
+        Spacer(Modifier.width(5.dp))
+        Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = dot, modifier = Modifier.size(10.dp))
+        Spacer(Modifier.width(4.dp))
+        Text("AI · $label", color = Color.White.copy(alpha = 0.8f), fontSize = 9.sp, fontWeight = FontWeight.Medium)
+    }
+}
 
 @Composable
 fun NudgeNotificationDisplay(

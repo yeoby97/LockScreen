@@ -90,6 +90,7 @@ import com.example.lockscreencopy.data.launchAppShortcut
 import com.example.lockscreencopy.data.loadInstalledApps
 import com.example.lockscreencopy.data.loadWeeklyUsage
 import com.example.lockscreencopy.data.NotificationRepository
+import com.example.lockscreencopy.data.NudgeEngineStatus
 import com.example.lockscreencopy.data.isNotificationListenerEnabled
 import com.example.lockscreencopy.data.openNotificationListenerSettings
 import com.example.lockscreencopy.data.openUsageAccessSettings
@@ -102,6 +103,7 @@ import com.example.lockscreencopy.model.WidgetSpace
 import com.example.lockscreencopy.model.ChatMessage
 import com.example.lockscreencopy.ui.notification.ChatNotificationStack
 import com.example.lockscreencopy.ui.notification.NotificationPermissionBanner
+import com.example.lockscreencopy.ui.notification.NudgeEngineIndicator
 import com.example.lockscreencopy.ui.llm.GhostInstance
 import com.example.lockscreencopy.ui.llm.LlmAppStrip
 import com.example.lockscreencopy.ui.llm.LlmRealWidgetGhost
@@ -1120,11 +1122,18 @@ fun LockScreen(
                                 onOpenSettings = { openNotificationListenerSettings(context) },
                             )
                         } else {
-                            ChatNotificationStack(
-                                appGroups = realNotifications.toAppGroups(),
-                                modifier = Modifier.fillMaxWidth(),
-                                onNudgeAction = onNudgeAction,
-                            )
+                            val nudgeEngine by NudgeEngineStatus.engine.collectAsState()
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                NudgeEngineIndicator(
+                                    engine = nudgeEngine,
+                                    modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+                                )
+                                ChatNotificationStack(
+                                    appGroups = realNotifications.toAppGroups(),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onNudgeAction = onNudgeAction,
+                                )
+                            }
                         }
                         NotificationMode.NONE -> Unit
                     }
