@@ -89,6 +89,7 @@ import com.example.lockscreencopy.data.hasUsageStatsPermission
 import com.example.lockscreencopy.data.launchAppShortcut
 import com.example.lockscreencopy.data.loadInstalledApps
 import com.example.lockscreencopy.data.loadWeeklyUsage
+import com.example.lockscreencopy.data.NanoTestRunner
 import com.example.lockscreencopy.data.NotificationRepository
 import com.example.lockscreencopy.data.NudgeEngineStatus
 import com.example.lockscreencopy.data.isNotificationListenerEnabled
@@ -1135,6 +1136,23 @@ fun LockScreen(
                                 )
                             }
                         }
+                        NotificationMode.NANO_TEST -> {
+                            // 권한 없이도 분석 파이프라인(Nano→폴백)을 검증하기 위한 가짜 알림.
+                            // 진입 시 한 번 분석을 돌려 NotificationRepository에 결과를 채운다.
+                            LaunchedEffect(Unit) { NanoTestRunner.run() }
+                            val nudgeEngine by NudgeEngineStatus.engine.collectAsState()
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                NudgeEngineIndicator(
+                                    engine = nudgeEngine,
+                                    modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+                                )
+                                ChatNotificationStack(
+                                    appGroups = realNotifications.toAppGroups(),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onNudgeAction = onNudgeAction,
+                                )
+                            }
+                        }
                         NotificationMode.NONE -> Unit
                     }
                 }
@@ -1480,6 +1498,7 @@ private fun NotificationSourceButton(
     val (color, label, icon) = when (mode) {
         NotificationMode.DUMMY -> Triple(dummyOrange, "더미", Icons.Filled.Science)
         NotificationMode.REAL  -> Triple(liveGreen,  "실시간", Icons.Filled.NotificationsActive)
+        NotificationMode.NANO_TEST -> Triple(Color(0xFF9B78FF), "Nano테스트", Icons.Filled.AutoAwesome)
         NotificationMode.NONE  -> Triple(offGray,    "없음", Icons.Filled.NotificationsOff)
     }
 
@@ -1513,6 +1532,6 @@ private fun NotificationSourceButton(
 }
 
 private enum class NotificationMode {
-    DUMMY, REAL, NONE;
+    DUMMY, REAL, NANO_TEST, NONE;
     fun next() = entries[(ordinal + 1) % entries.size]
 }
