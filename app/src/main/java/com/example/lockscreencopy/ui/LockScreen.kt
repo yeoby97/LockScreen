@@ -125,8 +125,6 @@ import com.example.lockscreencopy.ui.space.WidgetSpaceBubble
 import com.example.lockscreencopy.ui.space.WidgetSpaceExpanded
 import com.example.lockscreencopy.ui.widget.AiSketchWidgetItem
 import com.example.lockscreencopy.ui.widget.toBitmapSafe
-import com.example.lockscreencopy.ui.picker.AiActionChoice
-import com.example.lockscreencopy.ui.picker.AiActionPickerDialog
 import com.example.lockscreencopy.ui.picker.BottomShortcutPickerSheet
 import com.example.lockscreencopy.ui.picker.FavoriteAppsPickerScreen
 import com.example.lockscreencopy.ui.picker.FavoriteAppsSettingsSheet
@@ -237,7 +235,6 @@ fun LockScreen(
     var addTarget by remember { mutableStateOf(AddTarget.SLOT) }
 
     var showLlmSheet by remember { mutableStateOf(false) }
-    var showAiChooser by remember { mutableStateOf(false) }
     var llmSuggestion by remember { mutableStateOf<LlmSuggestionResult?>(null) }
 
     var sketchMode by remember { mutableStateOf(false) }
@@ -1227,7 +1224,7 @@ fun LockScreen(
 
         if (!isFloating && llmSuggestion == null && !sketchMode) {
             FloatingActionButton(
-                onClick = { showAiChooser = true },
+                onClick = { showLlmSheet = true },
                 containerColor = LockTokens.Accent,
                 contentColor = Color.White,
                 shape = CircleShape,
@@ -1270,22 +1267,6 @@ fun LockScreen(
                     fabSize = 42.dp,
                 )
             }
-        }
-
-        if (showAiChooser) {
-            AiActionPickerDialog(
-                onDismiss = { showAiChooser = false },
-                onSelect = { choice ->
-                    showAiChooser = false
-                    when (choice) {
-                        AiActionChoice.LlmLayout -> showLlmSheet = true
-                        AiActionChoice.Sketch -> {
-                            sketchError = null
-                            sketchMode = true
-                        }
-                    }
-                },
-            )
         }
 
         if (showLlmSheet) {
