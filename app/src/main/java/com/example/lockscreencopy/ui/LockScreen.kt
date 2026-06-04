@@ -1140,7 +1140,8 @@ fun LockScreen(
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(horizontal = 12.dp)
+                    // 플로팅 스케일(0.7) 기준 양옆 여백 = 화면 15% + 내부 8dp 여유
+                    .padding(horizontal = screenWidth * 0.15f + 8.dp)
                     .padding(bottom = screenHeight * 0.30f),
             ) {
                 ShortcutPickerDialog(
