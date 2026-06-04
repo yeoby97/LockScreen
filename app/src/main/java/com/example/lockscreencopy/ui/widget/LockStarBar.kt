@@ -6,11 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
@@ -68,15 +65,15 @@ fun LockStarBar(modifier: Modifier = Modifier) {
             // 시간(위) + 자물쇠(아래) 세로 배치
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+                verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
                 Text(
                     text = currentTime,
                     color = Color.White,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,
+                    lineHeight = 11.sp,
                 )
-                Spacer(Modifier.height(1.dp))
                 Icon(
                     imageVector = Icons.Filled.Lock,
                     contentDescription = null,
