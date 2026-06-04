@@ -4,17 +4,10 @@ import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -1141,38 +1134,28 @@ fun LockScreen(
             }
         }
 
-        // 팝업: Dialog 창 없이 화면 안에서 LockStar 바 바로 위로 슬라이드 업
+        // LockStar 바 위에 직접 카드 표시 — 화면 오버레이/애니메이션 없음
         BackHandler(enabled = showShortcutPopup) { showShortcutPopup = false }
-        AnimatedVisibility(
-            visible = showShortcutPopup,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(horizontal = 14.dp)
-                .padding(bottom = screenHeight * 0.28f),
-            enter = slideInVertically(
-                initialOffsetY = { it },
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessMediumLow,
-                ),
-            ) + fadeIn(animationSpec = tween(160)),
-            exit = slideOutVertically(
-                targetOffsetY = { it },
-                animationSpec = tween(200),
-            ) + fadeOut(animationSpec = tween(140)),
-        ) {
-            ShortcutPickerDialog(
-                modifier = Modifier.fillMaxWidth(),
-                onDismiss = { showShortcutPopup = false },
-                onSelect = { choice ->
-                    showShortcutPopup = false
-                    when (choice) {
-                        ShortcutChoice.RealWidget -> showRealWidgetPicker = true
-                        ShortcutChoice.FavoriteApp -> showFavoriteSettings = true
-                        ShortcutChoice.Text -> {}
-                    }
-                },
-            )
+        if (showShortcutPopup) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 12.dp)
+                    .padding(bottom = screenHeight * 0.30f),
+            ) {
+                ShortcutPickerDialog(
+                    modifier = Modifier.fillMaxWidth(),
+                    onDismiss = { showShortcutPopup = false },
+                    onSelect = { choice ->
+                        showShortcutPopup = false
+                        when (choice) {
+                            ShortcutChoice.RealWidget -> showRealWidgetPicker = true
+                            ShortcutChoice.FavoriteApp -> showFavoriteSettings = true
+                            ShortcutChoice.Text -> {}
+                        }
+                    },
+                )
+            }
         }
 
         if (showLockWidgetPicker) {
