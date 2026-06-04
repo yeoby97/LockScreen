@@ -38,17 +38,17 @@ fun ClockHeader(modifier: Modifier = Modifier, scale: Float = 1f) {
 
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            text = date,
-            color = Color.White.copy(alpha = 0.85f),
-            fontSize = (16 * scale).sp,
-            fontWeight = FontWeight.Normal,
-        )
-        Text(
             text = time,
             color = Color.White,
             fontSize = (96 * scale).sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = (-2 * scale).sp,
+        )
+        Text(
+            text = date,
+            color = Color.White.copy(alpha = 0.9f),
+            fontSize = (16 * scale).sp,
+            fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(top = (2 * scale).dp),
         )
     }
