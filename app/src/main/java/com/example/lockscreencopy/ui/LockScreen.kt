@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
@@ -84,6 +85,7 @@ import com.example.lockscreencopy.model.FloatingWidget
 import com.example.lockscreencopy.model.HostedAppWidget
 import com.example.lockscreencopy.model.PlacedWidget
 import com.example.lockscreencopy.model.WidgetSize
+import com.example.lockscreencopy.data.CustomMessagePublisher
 import com.example.lockscreencopy.data.DataSourceResolver
 import com.example.lockscreencopy.data.GeminiClient
 import com.example.lockscreencopy.data.handleSystemAction
@@ -105,6 +107,7 @@ import com.example.lockscreencopy.model.AiSketchWidget
 import com.example.lockscreencopy.model.WidgetSpace
 import com.example.lockscreencopy.model.ChatMessage
 import com.example.lockscreencopy.ui.notification.ChatNotificationStack
+import com.example.lockscreencopy.ui.notification.CustomMessageDialog
 import com.example.lockscreencopy.ui.notification.NotificationPermissionBanner
 import com.example.lockscreencopy.ui.notification.NudgeEngineIndicator
 import com.example.lockscreencopy.ui.llm.GhostInstance
@@ -180,6 +183,8 @@ fun LockScreen(
     val realNotifications by NotificationRepository.notifications.collectAsState()
     val dummyChatGroups = remember { sampleChats() }
     var notificationMode by remember { mutableStateOf(NotificationMode.DUMMY) }
+    var showCustomMessageDialog by remember { mutableStateOf(false) }
+    val notificationScope = rememberCoroutineScope()
 
     var hasNotificationPermission by remember { mutableStateOf(isNotificationListenerEnabled(context)) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -1118,13 +1123,17 @@ fun LockScreen(
                             modifier = Modifier.fillMaxWidth(),
                             onNudgeAction = onNudgeAction,
                         )
-                        NotificationMode.REAL -> if (!hasNotificationPermission) {
-                            NotificationPermissionBanner(
-                                onOpenSettings = { openNotificationListenerSettings(context) },
-                            )
-                        } else {
+                        NotificationMode.REAL -> {
                             val nudgeEngine by NudgeEngineStatus.engine.collectAsState()
                             Column(modifier = Modifier.fillMaxWidth()) {
+                                // 권한이 없어도 직접 발행한 테스트 메시지는 보여야 하므로,
+                                // 배너는 차단이 아닌 안내로만 표시하고 알림 스택은 항상 그린다.
+                                if (!hasNotificationPermission) {
+                                    NotificationPermissionBanner(
+                                        onOpenSettings = { openNotificationListenerSettings(context) },
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
                                 NudgeEngineIndicator(
                                     engine = nudgeEngine,
                                     modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
@@ -1287,6 +1296,19 @@ fun LockScreen(
                             modifier = Modifier.size(20.dp),
                         )
                     }
+                    FloatingActionButton(
+                        onClick = { showCustomMessageDialog = true },
+                        containerColor = LockTokens.Accent,
+                        contentColor = Color.White,
+                        shape = CircleShape,
+                        modifier = Modifier.size(42.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.Campaign,
+                            contentDescription = "알림 메시지 발행",
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
                 NotificationSourceButton(
                     mode = notificationMode,
@@ -1302,6 +1324,18 @@ fun LockScreen(
                 onResult = { result ->
                     showLlmSheet = false
                     llmSuggestion = result
+                },
+            )
+        }
+
+        if (showCustomMessageDialog) {
+            CustomMessageDialog(
+                onDismiss = { showCustomMessageDialog = false },
+                onSend = { text ->
+                    showCustomMessageDialog = false
+                    // 발행한 메시지가 보이도록 실시간 알림 영역으로 전환한다.
+                    notificationMode = NotificationMode.REAL
+                    notificationScope.launch { CustomMessagePublisher.publish(text) }
                 },
             )
         }
