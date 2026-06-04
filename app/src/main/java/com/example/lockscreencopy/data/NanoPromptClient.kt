@@ -50,8 +50,9 @@ object NanoPromptClient {
 
     /** 자유 프롬프트로 추론하고 텍스트 결과를 돌려준다. 실패 시 예외를 던진다. */
     suspend fun generate(prompt: String): String {
-        val request = generateContentRequest(TextPart(prompt))
+        // generateContentRequest(text, init): 텍스트와 빌더 람다 둘 다 필수(람다는 비워도 됨).
+        val request = generateContentRequest(TextPart(prompt)) {}
         val result = model.generateContent(request)
-        return result.text
+        return result.candidates.firstOrNull()?.text.orEmpty()
     }
 }
