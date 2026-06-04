@@ -867,7 +867,7 @@ fun LockScreen(
                         .align(Alignment.BottomCenter)
                         .onGloballyPositioned { bottomBarCoords = it }
                         .graphicsLayer { alpha = editAlpha }
-                        .padding(bottom = screenHeight * 0.05f)
+                        .padding(bottom = screenHeight * 0.04f)
                         .offset { IntOffset(greenBoxOffset.x.roundToInt(), greenBoxOffset.y.roundToInt()) }
                         .pointerInput(isFloating) {
                             detectDragGestures { c, d -> c.consume(); greenBoxOffset += d }
@@ -875,8 +875,8 @@ fun LockScreen(
                         .pointerInput(isFloating) {
                             detectTapGestures(onTap = { showShortcutPopup = true })
                         }
-                        .clip(RoundedCornerShape(26.dp))
-                        .border(1.dp, LockTokens.BorderSoft, RoundedCornerShape(26.dp)),
+                        .clip(RoundedCornerShape(29.dp))
+                        .border(1.dp, LockTokens.BorderSoft, RoundedCornerShape(29.dp)),
                 ) {
                     LockStarBar()
                 }

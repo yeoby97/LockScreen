@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,7 +23,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,7 +32,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private val BarShape = RoundedCornerShape(24.dp)
+private val BarShape = RoundedCornerShape(28.dp)
 private val barTimeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
 
 @Composable
@@ -48,14 +48,10 @@ fun LockStarBar(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .clip(BarShape)
-            .background(
-                Brush.verticalGradient(
-                    listOf(Color(0xFF2A3A8F), Color(0xFF141E5A)),
-                ),
-            )
-            .border(1.dp, Color.White.copy(alpha = 0.18f), BarShape)
-            .height(52.dp)
-            .padding(horizontal = 14.dp),
+            .background(Color(0xFF1A2E8A).copy(alpha = 0.55f))
+            .border(1.dp, Color.White.copy(alpha = 0.25f), BarShape)
+            .height(56.dp)
+            .padding(horizontal = 22.dp),
         contentAlignment = Alignment.Center,
     ) {
         Row(
