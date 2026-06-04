@@ -174,6 +174,13 @@ data class NotificationItem(
     val mapQuery: String = "",
     /** AI가 예측한 일정 시작 시각(epoch millis). 0이면 시간 미상. */
     val eventStartMillis: Long = 0L,
+    /**
+     * 이 알림(채팅방)에 쌓인 안읽은 메시지들(오래된 → 최신).
+     * 채팅 앱은 MessagingStyle로 최근 여러 줄을 함께 보내므로, 더미 데이터처럼
+     * 방 하나에 여러 메시지를 쭈루룩 보여줄 수 있다. 넛지는 메시지별로 채워진다.
+     * 비어 있으면 [body]/[title] 한 줄로 대체된다.
+     */
+    val messages: List<ChatMessage> = emptyList(),
 )
 
 // ───────────────────────────────────────────────────────────────

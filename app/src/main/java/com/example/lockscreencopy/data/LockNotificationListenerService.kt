@@ -4,6 +4,7 @@ import android.app.Notification
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import com.example.lockscreencopy.model.ChatMessage
 import com.example.lockscreencopy.model.NotificationItem
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
@@ -55,29 +56,23 @@ class LockNotificationListenerService : NotificationListenerService() {
     }
 
     /**
-     * 일반 알림으로 먼저 표시한 메시지를 AI로 분석해, 넛지면 결과를 채워 갱신한다.
+     * 방 안의 각 메시지를 AI로 분석해, 넛지면 해당 메시지에 결과를 붙여 갱신한다.
      * 단톡방 폭주를 고려해, 값싼 1차 필터([NudgeAnalyzer.isCandidate])를 통과한
-     * 메시지만 실제 분석(API 호출) 대상으로 삼는다.
+     * 메시지만 실제 분석(Nano/API 호출) 대상으로 삼는다.
      * [postMillis]는 "2시간 뒤" 같은 상대 시각 계산의 기준이 되는 메시지 수신 시각이다.
      */
     private fun refineNudge(item: NotificationItem, postMillis: Long) {
-        if (!NudgeAnalyzer.isCandidate(item.title, item.body)) {
-            Log.d(TAG, "1차 필터 제외(너무 짧음): title='${item.title}' body='${item.body}'")
-            return
-        }
         scope.launch {
-            val refined = NudgeAnalyzer.analyze(item.title, item.body, postMillis)
-            if (refined.hasNudge != item.hasNudge ||
-                refined.nudgeLabel != item.nudgeLabel ||
-                refined.actions != item.nudgeActions ||
-                refined.mapQuery != item.mapQuery ||
-                refined.eventStartMillis != item.eventStartMillis
-            ) {
-                Log.i(TAG, "넛지 갱신: id=${item.id} hasNudge=${refined.hasNudge} label='${refined.nudgeLabel}' actions=${refined.actions} mapQuery='${refined.mapQuery}' startMillis=${refined.eventStartMillis}")
-                NotificationRepository.updateNudge(item.id, refined)
-            } else {
-                Log.d(TAG, "넛지 변경 없음: id=${item.id} (hasNudge=${refined.hasNudge})")
+            val analyzed = item.messages.map { m ->
+                if (!NudgeAnalyzer.isCandidate(m.sender, m.text)) {
+                    m
+                } else {
+                    val refined = NudgeAnalyzer.analyze(m.sender, m.text, postMillis)
+                    Log.i(TAG, "메시지 분석: id=${item.id} text='${m.text}' hasNudge=${refined.hasNudge} label='${refined.nudgeLabel}'")
+                    m.copy(nudge = refined.toMessageNudge())
+                }
             }
+            NotificationRepository.updateMessages(item.id, analyzed)
         }
     }
 
@@ -91,20 +86,43 @@ class LockNotificationListenerService : NotificationListenerService() {
         if (notification.visibility == Notification.VISIBILITY_SECRET) return null
 
         val extras = notification.extras
-        val title = extras.getString(Notification.EXTRA_TITLE)?.takeIf { it.isNotBlank() }
-            ?: return null
         val body = extras.getString(Notification.EXTRA_BIG_TEXT)
             ?: extras.getString(Notification.EXTRA_TEXT)
             ?: ""
         val appName = NotificationRepository.resolveAppName(applicationContext, packageName)
 
-        // 넛지는 전적으로 AI(refineNudge)가 채운다. 도착 시점엔 일반 알림으로 표시.
+        // 채팅 앱은 MessagingStyle로 최근 안읽은 메시지들을 함께 보낸다.
+        // 이를 읽어 방 하나에 여러 줄이 쌓여 보이도록 한다(더미 데이터와 동일한 모습).
+        val style = runCatching {
+            Notification.MessagingStyle.extractMessagingStyleFromNotification(notification)
+        }.getOrNull()
+
+        val roomName = style?.conversationTitle?.toString()?.takeIf { it.isNotBlank() }
+            ?: extras.getString(Notification.EXTRA_TITLE)?.takeIf { it.isNotBlank() }
+            ?: return null
+
+        val messages: List<ChatMessage> = style?.messages?.mapNotNull { m ->
+            val text = m.text?.toString()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            ChatMessage(
+                id = "$key#${m.timestamp}",
+                sender = m.senderPerson?.name?.toString().orEmpty(),
+                text = text,
+                timeLabel = formatRelativeTime(m.timestamp),
+            )
+        }.orEmpty().ifEmpty {
+            // MessagingStyle이 아니거나 비었으면 본문 한 줄로 대체.
+            val single = body.ifBlank { roomName }
+            listOf(ChatMessage(id = "$key#single", sender = "", text = single, timeLabel = formatRelativeTime(postTime)))
+        }
+
+        // 넛지는 전적으로 AI(refineNudge)가 메시지별로 채운다. 도착 시점엔 일반 메시지로 표시.
         return NotificationItem(
             id = key,
             appName = appName,
-            title = title,
+            title = roomName,
             body = body,
             timeLabel = formatRelativeTime(postTime),
+            messages = messages,
         )
     }
 
