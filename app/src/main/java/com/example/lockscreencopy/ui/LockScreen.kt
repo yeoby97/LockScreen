@@ -1250,29 +1250,18 @@ fun LockScreen(
                 verticalAlignment = Alignment.Top,
             ) {
                 if (!spaceSketchMode && expandedSpaceId == null) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        FloatingActionButton(
-                            onClick = { spaceSketchTargetId = null; spaceSketchMode = true },
-                            containerColor = LockTokens.Accent,
-                            contentColor = Color.White,
-                            shape = CircleShape,
-                            modifier = Modifier.size(42.dp),
-                        ) {
-                            Icon(
-                                Icons.Filled.CreateNewFolder,
-                                contentDescription = "위젯 공간 만들기",
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color.Black.copy(alpha = 0.5f))
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
-                        ) {
-                            Text("위젯묶기", color = Color.White, fontSize = 10.sp)
-                        }
+                    FloatingActionButton(
+                        onClick = { spaceSketchTargetId = null; spaceSketchMode = true },
+                        containerColor = LockTokens.Accent,
+                        contentColor = Color.White,
+                        shape = CircleShape,
+                        modifier = Modifier.size(42.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.CreateNewFolder,
+                            contentDescription = "위젯 공간 만들기",
+                            modifier = Modifier.size(20.dp),
+                        )
                     }
                 }
                 NotificationSourceButton(
@@ -1527,32 +1516,14 @@ private fun NotificationSourceButton(
         NotificationMode.NONE  -> Triple(offGray,    "없음", Icons.Filled.NotificationsOff)
     }
 
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
+    FloatingActionButton(
+        onClick = onCycle,
+        containerColor = color,
+        contentColor = Color.White,
+        shape = CircleShape,
+        modifier = modifier.size(fabSize),
     ) {
-        FloatingActionButton(
-            onClick = onCycle,
-            containerColor = color,
-            contentColor = Color.White,
-            shape = CircleShape,
-            modifier = Modifier.size(fabSize),
-        ) {
-            Icon(icon, contentDescription = "알림 모드 전환", modifier = Modifier.size(20.dp))
-        }
-        Spacer(Modifier.height(4.dp))
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color.Black.copy(alpha = 0.5f))
-                .padding(horizontal = 6.dp, vertical = 2.dp),
-        ) {
-            Text(
-                text = label,
-                color = Color.White,
-                fontSize = 10.sp,
-            )
-        }
+        Icon(icon, contentDescription = "알림 모드 전환", modifier = Modifier.size(20.dp))
     }
 }
 

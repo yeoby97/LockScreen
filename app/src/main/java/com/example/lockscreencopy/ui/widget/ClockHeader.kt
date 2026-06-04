@@ -41,13 +41,14 @@ fun ClockHeader(modifier: Modifier = Modifier, scale: Float = 1f) {
             text = time,
             color = Color.White,
             fontSize = (64 * scale).sp,
-            fontWeight = FontWeight.Light,
-            letterSpacing = (-2 * scale).sp,
+            fontWeight = FontWeight.Normal,
+            letterSpacing = (-1 * scale).sp,
         )
         Text(
             text = date,
-            color = Color.White.copy(alpha = 0.9f),
-            fontSize = (16 * scale).sp,
+            color = Color.White.copy(alpha = 0.85f),
+            fontSize = (15 * scale).sp,
+            fontWeight = FontWeight.Normal,
             modifier = Modifier.padding(top = (2 * scale).dp),
         )
     }
