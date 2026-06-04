@@ -4,6 +4,7 @@ import android.util.Log
 import com.google.mlkit.genai.common.FeatureStatus
 import com.google.mlkit.genai.prompt.Generation
 import com.google.mlkit.genai.prompt.GenerativeModel
+import com.google.mlkit.genai.prompt.TextPart
 import com.google.mlkit.genai.prompt.generateContentRequest
 import kotlinx.coroutines.flow.collect
 
@@ -49,7 +50,7 @@ object NanoPromptClient {
 
     /** 자유 프롬프트로 추론하고 텍스트 결과를 돌려준다. 실패 시 예외를 던진다. */
     suspend fun generate(prompt: String): String {
-        val request = generateContentRequest { text(prompt) }
+        val request = generateContentRequest(TextPart(prompt))
         val result = model.generateContent(request)
         return result.text
     }
