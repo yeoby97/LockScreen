@@ -436,7 +436,7 @@ fun LockScreen(
     }
 
     val scale by animateFloatAsState(
-        targetValue = if (isFloating) 0.7f else 1f,
+        targetValue = if (isFloating) 0.77f else 1f,
         animationSpec = tween(500, easing = FastOutSlowInEasing), label = "scale",
     )
     val cornerRadius by animateDpAsState(
@@ -1140,9 +1140,9 @@ fun LockScreen(
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    // 플로팅 스케일(0.7) 기준 양옆 여백 = 화면 15% + 내부 8dp 여유
-                    .padding(horizontal = screenWidth * 0.15f + 8.dp)
-                    .padding(bottom = screenHeight * 0.30f),
+                    // 플로팅 스케일(0.77) 여백 = 화면 17% + 8dp → 바 가리지 않는 위치
+                    .padding(horizontal = screenWidth * 0.17f + 8.dp)
+                    .padding(bottom = screenHeight * 0.28f),
             ) {
                 ShortcutPickerDialog(
                     modifier = Modifier.fillMaxWidth(),
