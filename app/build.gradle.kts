@@ -67,6 +67,8 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.android)
+    // 온디바이스 Gemini Nano 자유 프롬프트(ML Kit GenAI Prompt API).
+    implementation(libs.mlkit.genai.prompt)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

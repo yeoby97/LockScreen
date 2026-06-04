@@ -1,6 +1,7 @@
 package com.example.lockscreencopy.data
 
 import android.content.Context
+import com.example.lockscreencopy.model.ChatMessage
 import com.example.lockscreencopy.model.NotificationItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -38,6 +39,12 @@ object NotificationRepository {
                     eventStartMillis = result.eventStartMillis,
                 )
             }
+        }
+
+    /** 방 안의 메시지 목록(메시지별 넛지 포함)을 제자리에서 갱신한다(순서 유지). */
+    fun updateMessages(id: String, messages: List<ChatMessage>) =
+        _notifications.update { current ->
+            current.map { item -> if (item.id != id) item else item.copy(messages = messages) }
         }
 
     fun remove(id: String) =
