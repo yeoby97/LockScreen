@@ -51,11 +51,13 @@ import com.example.lockscreencopy.model.AppNotificationGroup
 import com.example.lockscreencopy.model.ChatMessage
 import com.example.lockscreencopy.model.ChatRoom
 
-private val nudgePurple = Color(0xFF9B78FF)
-private val nudgeCyan = Color(0xFF4FC3F7)
+// 밝은(라이트) 알림 카드 팔레트 — 흰 벽지에서도 글씨가 읽히도록 카드는 밝게, 글씨는 짙게.
+private val nudgePurple = Color(0xFF6C4BD8)   // 밝은 카드 위에서도 대비가 나오는 짙은 보라
+private val nudgeCyan = Color(0xFF0E7FAF)     // 밝은 카드 위 링크용 짙은 청록
 private val nudgeGradient = Brush.linearGradient(listOf(nudgePurple, nudgeCyan))
 private val cardShape = RoundedCornerShape(20.dp)
-private val cardBg = Color(0xCC2A2A2C)
+private val cardBg = Color(0xF2FFFFFF)         // 밝은 반투명 카드(그림자로 배경과 분리)
+private val textPrimary = Color(0xFF1B1B1D)    // 카드 위 기본 글씨색(알파로 위계 표현)
 private val chipShape = RoundedCornerShape(50)
 
 /**
@@ -129,21 +131,21 @@ private fun AppTopCard(group: AppNotificationGroup, room: ChatRoom) {
     Column(
         Modifier
             .fillMaxWidth()
-            .shadow(8.dp, cardShape, clip = false)
+            .shadow(10.dp, cardShape, clip = false)
             .clip(cardShape)
             .then(if (group.nudgeCount > 0) Modifier.border(1.dp, nudgeGradient, cardShape) else Modifier)
             .background(cardBg)
             .padding(horizontal = 14.dp, vertical = 9.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(group.appName, color = Color.White.copy(alpha = 0.6f), fontSize = 10.sp, fontWeight = FontWeight.Medium)
+            Text(group.appName, color = textPrimary.copy(alpha = 0.6f), fontSize = 10.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.weight(1f))
-            Text(latest?.timeLabel.orEmpty(), color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp)
+            Text(latest?.timeLabel.orEmpty(), color = textPrimary.copy(alpha = 0.4f), fontSize = 10.sp)
         }
         Spacer(Modifier.height(3.dp))
         Text(
             room.roomName,
-            color = Color.White,
+            color = textPrimary,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
@@ -152,7 +154,7 @@ private fun AppTopCard(group: AppNotificationGroup, room: ChatRoom) {
         Spacer(Modifier.height(1.dp))
         Text(
             messagePreview(latest),
-            color = Color.White.copy(alpha = 0.75f),
+            color = textPrimary.copy(alpha = 0.75f),
             fontSize = 11.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -161,7 +163,7 @@ private fun AppTopCard(group: AppNotificationGroup, room: ChatRoom) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             if (group.nudgeCount > 0) NudgeBadge("행동 ${group.nudgeCount}건")
             Spacer(Modifier.weight(1f))
-            Text("채팅방 ${group.roomCount}개 · 탭하면 펼치기", color = Color.White.copy(alpha = 0.45f), fontSize = 10.sp)
+            Text("채팅방 ${group.roomCount}개 · 탭하면 펼치기", color = textPrimary.copy(alpha = 0.45f), fontSize = 10.sp)
         }
     }
 }
@@ -211,7 +213,7 @@ private fun ShadeHandle(onClose: () -> Unit) {
                 .width(36.dp)
                 .height(4.dp)
                 .clip(chipShape)
-                .background(Color.White.copy(alpha = 0.35f)),
+                .background(textPrimary.copy(alpha = 0.35f)),
         )
     }
 }
@@ -232,9 +234,9 @@ private fun AppHeader(group: AppNotificationGroup) {
                 .background(nudgePurple),
         )
         Spacer(Modifier.width(7.dp))
-        Text(group.appName, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text(group.appName, color = textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.width(7.dp))
-        Text("채팅방 ${group.roomCount}개", color = Color.White.copy(alpha = 0.45f), fontSize = 11.sp)
+        Text("채팅방 ${group.roomCount}개", color = textPrimary.copy(alpha = 0.45f), fontSize = 11.sp)
         if (group.nudgeCount > 0) {
             Spacer(Modifier.width(7.dp))
             NudgeBadge("${group.nudgeCount}")
@@ -257,6 +259,7 @@ private fun RoomCard(
     Column(
         Modifier
             .fillMaxWidth()
+            .shadow(6.dp, cardShape, clip = false)
             .clip(cardShape)
             .then(if (hasNudge) Modifier.border(1.dp, nudgeGradient, cardShape) else Modifier)
             .background(cardBg),
@@ -273,7 +276,7 @@ private fun RoomCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         room.roomName,
-                        color = Color.White,
+                        color = textPrimary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -281,7 +284,7 @@ private fun RoomCard(
                         modifier = Modifier.weight(1f, fill = false),
                     )
                     Spacer(Modifier.width(6.dp))
-                    Text("${room.messageCount}", color = Color.White.copy(alpha = 0.4f), fontSize = 11.sp)
+                    Text("${room.messageCount}", color = textPrimary.copy(alpha = 0.4f), fontSize = 11.sp)
                     if (hasNudge) {
                         Spacer(Modifier.width(6.dp))
                         NudgeBadge("${room.nudgeCount}")
@@ -290,7 +293,7 @@ private fun RoomCard(
                 Spacer(Modifier.height(2.dp))
                 Text(
                     messagePreview(room.latest),
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = textPrimary.copy(alpha = 0.7f),
                     fontSize = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -300,7 +303,7 @@ private fun RoomCard(
             Icon(
                 Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = if (expanded) "접기" else "펼치기",
-                tint = Color.White.copy(alpha = 0.6f),
+                tint = textPrimary.copy(alpha = 0.6f),
                 modifier = Modifier
                     .size(22.dp)
                     .rotate(arrowRotation),
@@ -362,13 +365,13 @@ private fun FilterToggle(nudgeOnly: Boolean, onChange: (Boolean) -> Unit) {
 private fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Text(
         label,
-        color = if (selected) Color.White else Color.White.copy(alpha = 0.55f),
+        color = if (selected) textPrimary else textPrimary.copy(alpha = 0.55f),
         fontSize = 11.sp,
         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
         modifier = Modifier
             .clip(chipShape)
             .clickable(onClick = onClick)
-            .background(if (selected) nudgePurple.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.08f))
+            .background(if (selected) nudgePurple.copy(alpha = 0.35f) else textPrimary.copy(alpha = 0.08f))
             .padding(horizontal = 12.dp, vertical = 6.dp),
     )
 }
@@ -388,12 +391,12 @@ private fun MessageRow(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             if (message.sender.isNotBlank()) {
-                Text(message.sender, color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                Text(message.sender, color = textPrimary.copy(alpha = 0.6f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.weight(1f))
             } else {
                 Spacer(Modifier.weight(1f))
             }
-            Text(message.timeLabel, color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp)
+            Text(message.timeLabel, color = textPrimary.copy(alpha = 0.4f), fontSize = 10.sp)
         }
         Spacer(Modifier.height(2.dp))
         Row(verticalAlignment = Alignment.Top) {
@@ -409,7 +412,7 @@ private fun MessageRow(
             }
             Text(
                 message.text,
-                color = Color.White.copy(alpha = if (isNudge) 0.95f else 0.82f),
+                color = textPrimary.copy(alpha = if (isNudge) 0.95f else 0.82f),
                 fontSize = 13.sp,
                 lineHeight = 18.sp,
             )
@@ -463,7 +466,7 @@ private fun Divider() {
         Modifier
             .fillMaxWidth()
             .height(0.5.dp)
-            .background(Color.White.copy(alpha = 0.08f)),
+            .background(textPrimary.copy(alpha = 0.08f)),
     )
 }
 
