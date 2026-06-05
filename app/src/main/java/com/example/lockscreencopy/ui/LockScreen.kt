@@ -760,7 +760,7 @@ fun LockScreen(
                 }
                 // graphicsLayer 안쪽이어야 자식(ghost)과 같은 pre-scale 공간이 됨
                 .onGloballyPositioned { contentRootCoords = it }
-                // floating 카드를 배경과 분리한다: 떠 보이는 그림자 + 또렷한 테두리 선.
+                // floating 카드를 배경과 분리한다: 떠 보이는 그림자로 입체감만 준다.
                 // editAlpha(0→1)로 묶어 일반 잠금화면에선 안 보이고 편집 모드에서만 나타난다.
                 .shadow(
                     elevation = 20.dp * editAlpha,
@@ -768,11 +768,6 @@ fun LockScreen(
                     clip = false,
                 )
                 .clip(RoundedCornerShape(cornerRadius))
-                .border(
-                    width = 1.dp,
-                    color = Color.White.copy(alpha = 0.7f * editAlpha),
-                    shape = RoundedCornerShape(cornerRadius),
-                )
                 .pointerInput(Unit) {
                     detectTapGestures(onPress = {
                         val t0 = System.currentTimeMillis()

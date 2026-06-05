@@ -90,7 +90,7 @@ private fun CollapsedStacks(
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         appGroups.forEach { group ->
             AppStackCard(
@@ -113,8 +113,8 @@ private fun AppStackCard(group: AppNotificationGroup, modifier: Modifier = Modif
             Box(
                 Modifier
                     .matchParentSize()
-                    .padding(horizontal = (depth * 10).dp)
-                    .offset(y = (depth * 7).dp)
+                    .padding(horizontal = (depth * 8).dp)
+                    .offset(y = (depth * 5).dp)
                     .clip(cardShape)
                     .background(cardBg.copy(alpha = (0.55f - depth * 0.13f).coerceAtLeast(0.22f))),
             )
@@ -133,31 +133,31 @@ private fun AppTopCard(group: AppNotificationGroup, room: ChatRoom) {
             .clip(cardShape)
             .then(if (group.nudgeCount > 0) Modifier.border(1.dp, nudgeGradient, cardShape) else Modifier)
             .background(cardBg)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 14.dp, vertical = 9.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(group.appName, color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            Text(group.appName, color = Color.White.copy(alpha = 0.6f), fontSize = 10.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.weight(1f))
             Text(latest?.timeLabel.orEmpty(), color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp)
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(3.dp))
         Text(
             room.roomName,
             color = Color.White,
-            fontSize = 13.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(1.dp))
         Text(
             messagePreview(latest),
             color = Color.White.copy(alpha = 0.75f),
-            fontSize = 12.sp,
-            maxLines = 2,
+            fontSize = 11.sp,
+            maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             if (group.nudgeCount > 0) NudgeBadge("행동 ${group.nudgeCount}건")
             Spacer(Modifier.weight(1f))
