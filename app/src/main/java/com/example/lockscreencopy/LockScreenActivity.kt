@@ -20,6 +20,9 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.example.lockscreencopy.model.HostedAppWidget
 import com.example.lockscreencopy.ui.LockScreen
 import com.example.lockscreencopy.ui.resolveWidgetSizeDp
@@ -71,6 +74,7 @@ class LockScreenActivity : ComponentActivity() {
         appWidgetHost = AppWidgetHost(this, HOST_ID)
         setShowWhenLocked(true)
         setTurnScreenOn(true)
+        hideNavigationBar()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             keyguardManager.requestDismissKeyguard(this, null)
         }
@@ -89,6 +93,21 @@ class LockScreenActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // 위젯 바인딩/설정 등 다른 화면을 다녀오면 내비게이션 바가 다시 보일 수 있어 재적용한다.
+        if (hasFocus) hideNavigationBar()
+    }
+
+    // 잠금화면처럼 하단 내비게이션 바(홈·뒤로·최근 버튼)만 숨긴다. 상단 상태바(시계/배터리)는 유지.
+    // 가장자리를 스와이프하면 잠깐 나타났다가 자동으로 다시 숨는다.
+    private fun hideNavigationBar() {
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller.hide(WindowInsetsCompat.Type.navigationBars())
     }
 
     override fun onStart() {

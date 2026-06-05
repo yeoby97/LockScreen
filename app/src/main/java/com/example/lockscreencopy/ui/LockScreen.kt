@@ -162,6 +162,13 @@ import android.widget.Toast
 import com.example.lockscreencopy.model.AiTextSlot
 import com.example.lockscreencopy.model.InfoSource
 
+/**
+ * floating(편집) 모드에서 화면을 축소할 때 쓰는 세로 피벗(0=상단, 1=하단).
+ * 값이 클수록 축소된 카드가 아래로 내려가 하단 빈 공간이 줄어든다(삼성 잠금화면 편집처럼).
+ * transformOrigin·시계 위치 보정·스케치 좌표 역변환이 모두 같은 값을 공유해야 한다.
+ */
+private const val FLOAT_PIVOT_Y = 0.40f
+
 private enum class ShortcutSide { LEFT, RIGHT }
 
 @Composable
@@ -542,10 +549,10 @@ fun LockScreen(
 
     // ── 위젯 공간(스케치 묶음) 유틸 ────────────────────────────────
     // 스케치 오버레이는 화면(스크린) 좌표를 쓰지만 위젯은 스케일 Box 로컬 좌표에 배치되므로,
-    // 같은 변환(pivot 0.5,0.2 · scale)의 역변환으로 좌표계를 맞춘다.
+    // 같은 변환(pivot 0.5,FLOAT_PIVOT_Y · scale)의 역변환으로 좌표계를 맞춘다.
     fun screenRectToLocal(screen: Rect): Rect {
         val pivotX = screenWidthPx * 0.5f
-        val pivotY = screenHeightPx * 0.2f
+        val pivotY = screenHeightPx * FLOAT_PIVOT_Y
         val s = if (scale == 0f) 1f else scale
         fun cvt(x: Float, y: Float) = Offset(
             pivotX + (x - pivotX) / s,
@@ -742,7 +749,7 @@ fun LockScreen(
             modifier = Modifier.fillMaxSize()
                 .graphicsLayer {
                     scaleX = scale; scaleY = scale
-                    transformOrigin = TransformOrigin(0.5f, 0.2f)
+                    transformOrigin = TransformOrigin(0.5f, FLOAT_PIVOT_Y)
                 }
                 // graphicsLayer 안쪽이어야 자식(ghost)과 같은 pre-scale 공간이 됨
                 .onGloballyPositioned { contentRootCoords = it }
@@ -1502,7 +1509,7 @@ private fun clockCompensation(
 ): Offset {
     if (scale == 1f) return Offset.Zero
     val pivotX = screenWidthPx * 0.5f
-    val pivotY = screenHeightPx * 0.2f
+    val pivotY = screenHeightPx * FLOAT_PIVOT_Y
     return Offset(
         x = (naturalPos.x - pivotX) * (1f - scale) / scale,
         y = (naturalPos.y - pivotY) * (1f - scale) / scale,
