@@ -163,11 +163,17 @@ import com.example.lockscreencopy.model.AiTextSlot
 import com.example.lockscreencopy.model.InfoSource
 
 /**
- * floating(편집) 모드에서 화면을 축소할 때 쓰는 세로 피벗(0=상단, 1=하단).
- * 값이 클수록 축소된 카드가 아래로 내려가 하단 빈 공간이 줄어든다(삼성 잠금화면 편집처럼).
+ * floating(편집) 모드 축소 배율. 클수록(1에 가까울수록) 카드가 커져 상·하·좌우 여백이 함께 줄어든다.
+ * 가로/세로 전체 여백(각각 1-FLOAT_SCALE)의 크기를 이 값이 결정한다.
+ */
+private const val FLOAT_SCALE = 0.84f
+
+/**
+ * floating(편집) 모드 세로 피벗(0=상단, 1=하단). 세로 여백(1-FLOAT_SCALE)을 위/아래로 배분한다.
+ * 작을수록 위 여백이 줄어(카메라 영역만 남김) 남는 공간이 아래로 몰린다.
  * transformOrigin·시계 위치 보정·스케치 좌표 역변환이 모두 같은 값을 공유해야 한다.
  */
-private const val FLOAT_PIVOT_Y = 0.40f
+private const val FLOAT_PIVOT_Y = 0.27f
 
 private enum class ShortcutSide { LEFT, RIGHT }
 
@@ -449,7 +455,7 @@ fun LockScreen(
     }
 
     val scale by animateFloatAsState(
-        targetValue = if (isFloating) 0.77f else 1f,
+        targetValue = if (isFloating) FLOAT_SCALE else 1f,
         animationSpec = tween(500, easing = FastOutSlowInEasing), label = "scale",
     )
     val cornerRadius by animateDpAsState(
@@ -1181,7 +1187,7 @@ fun LockScreen(
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    // 플로팅 스케일(0.77) 여백 = 화면 17% + 8dp → 바 가리지 않는 위치
+                    // 플로팅 카드 좌우 여백에 맞춰 안쪽으로 — 바를 가리지 않는 위치
                     .padding(horizontal = screenWidth * 0.17f + 8.dp)
                     .padding(bottom = screenHeight * 0.28f),
             ) {
