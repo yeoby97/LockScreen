@@ -10,14 +10,6 @@ import com.example.lockscreencopy.model.LockWidget
 import com.example.lockscreencopy.model.WidgetApp
 import com.example.lockscreencopy.model.WidgetSize
 
-data class LlmAppEntry(
-    val id: String,
-    val name: String,
-    val kind: Kind,
-) {
-    enum class Kind { WIDGET_APP, REAL_WIDGET_APP, SYSTEM_SHORTCUT, INSTALLED_APP }
-}
-
 data class RealAppWidgets(
     val packageName: String,
     val appLabel: String,
@@ -42,17 +34,28 @@ data class LlmCatalog(
     val systemShortcuts: List<BottomShortcut.System>,
     val installedApps: List<BottomShortcut.App>,
 ) {
-    fun firstStepEntries(): List<LlmAppEntry> {
-        val out = ArrayList<LlmAppEntry>(
-            widgetApps.size + realApps.size + systemShortcuts.size + installedApps.size,
-        )
-        widgetApps.forEach { out += LlmAppEntry(it.id, it.name, LlmAppEntry.Kind.WIDGET_APP) }
-        realApps.forEach {
-            out += LlmAppEntry(it.firstStepId, it.appLabel, LlmAppEntry.Kind.REAL_WIDGET_APP)
+    /**
+     * 첫 단계(앱 선별) 없이 전체 카탈로그를 위젯 후보로 그대로 펼친다.
+     * LLM 에게 모든 위젯을 한 번에 보여 주고 위젯 단위로 직접 고르게 하기 위함.
+     */
+    fun allCandidates(): SelectedFirstStep =
+        SelectedFirstStep(widgetApps, realApps, systemShortcuts, installedApps)
+
+    /**
+     * 위젯 단위 추천 결과(LlmRecommendation)를 실제 앱/위젯 객체로 환원한다.
+     * 추천에 포함된 트레이 위젯/실제 위젯 component/바로가기 id 를 가진 항목만 남긴다.
+     */
+    fun resolveRecommendation(rec: LlmRecommendation): SelectedFirstStep {
+        val trayIds = rec.tray.toHashSet()
+        val floatingComponents = rec.floating.toHashSet()
+        val shortcutIds = listOfNotNull(rec.left, rec.right).toHashSet()
+        val apps = widgetApps.filter { app -> app.widgets.any { it.id in trayIds } }
+        val reals = realApps.filter { ra ->
+            ra.providers.any { it.provider.flattenToShortString() in floatingComponents }
         }
-        systemShortcuts.forEach { out += LlmAppEntry(it.id, it.label, LlmAppEntry.Kind.SYSTEM_SHORTCUT) }
-        installedApps.forEach { out += LlmAppEntry(it.id, it.label, LlmAppEntry.Kind.INSTALLED_APP) }
-        return out
+        val sys = systemShortcuts.filter { it.id in shortcutIds }
+        val inst = installedApps.filter { it.id in shortcutIds }
+        return SelectedFirstStep(apps, reals, sys, inst)
     }
 
     fun resolveSelectedApps(ids: List<String>): SelectedFirstStep {

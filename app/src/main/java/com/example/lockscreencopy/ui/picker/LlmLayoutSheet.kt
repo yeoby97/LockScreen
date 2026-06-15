@@ -237,29 +237,30 @@ fun LlmLayoutSheet(
                             val cat = catalog ?: return@Button
                             error = null
                             loading = true
-                            stepMessage = "추천 앱을 고르는 중..."
+                            stepMessage = "위젯을 고르는 중..."
                             scope.launch {
                                 try {
-                                    val ids = GeminiClient.recommendApps(input, cat.firstStepEntries())
-                                    val selected = cat.resolveSelectedApps(ids)
+                                    // 앱을 먼저 거르지 않고 전체 위젯 후보를 한 번에 넘겨
+                                    // LLM 이 위젯 단위로 직접 고르게 한다.
+                                    val all = cat.allCandidates()
+                                    val rec = GeminiClient.recommendWidgets(
+                                        userQuery = input,
+                                        trayCandidates = all.trayCandidates(),
+                                        floatingCandidates = all.floatingEntriesForPrompt(
+                                            context.packageManager,
+                                        ),
+                                        shortcutCandidates = all.shortcutCandidates(),
+                                    )
+                                    val selected = cat.resolveRecommendation(rec)
                                     if (selected.widgetApps.isEmpty() &&
                                         selected.realApps.isEmpty() &&
                                         selected.systemShortcuts.isEmpty() &&
                                         selected.installedApps.isEmpty()
                                     ) {
-                                        error = "AI가 추천한 앱이 없어요. 입력을 더 구체적으로 적어주세요."
+                                        error = "AI가 추천한 위젯이 없어요. 입력을 더 구체적으로 적어주세요."
                                         loading = false
                                         return@launch
                                     }
-                                    stepMessage = "위젯을 고르는 중..."
-                                    val rec = GeminiClient.recommendWidgets(
-                                        userQuery = input,
-                                        trayCandidates = selected.trayCandidates(),
-                                        floatingCandidates = selected.floatingEntriesForPrompt(
-                                            context.packageManager,
-                                        ),
-                                        shortcutCandidates = selected.shortcutCandidates(),
-                                    )
                                     loading = false
                                     onResult(LlmSuggestionResult(input, selected, rec))
                                 } catch (t: Throwable) {

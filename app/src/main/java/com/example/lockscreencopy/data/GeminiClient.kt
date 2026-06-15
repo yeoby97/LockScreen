@@ -38,7 +38,7 @@ data class SketchScene(
 object GeminiClient {
     // TODO: 실제 키로 교체하세요. (현재는 임시 하드코딩 상수)
     private const val API_KEY: String = "YOUR_GEMINI_API_KEY"
-    private const val MODEL = "gemini-2.5-flash"
+    private const val MODEL = "gemini-3.5-flash"
     private const val ENDPOINT =
         "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent"
 
@@ -61,39 +61,6 @@ object GeminiClient {
 
     class LlmException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
-    suspend fun recommendApps(userQuery: String, entries: List<LlmAppEntry>): List<String> =
-        withContext(Dispatchers.IO) {
-            val listText = buildString {
-                entries.forEach { e ->
-                    val kindLabel = when (e.kind) {
-                        LlmAppEntry.Kind.WIDGET_APP -> "트레이용 mock 위젯 앱"
-                        LlmAppEntry.Kind.REAL_WIDGET_APP -> "자유배치용 실제 앱"
-                        LlmAppEntry.Kind.SYSTEM_SHORTCUT -> "기본 기능"
-                        LlmAppEntry.Kind.INSTALLED_APP -> "설치된 앱 바로가기"
-                    }
-                    append("- id=").append(e.id)
-                        .append(" | 분류=").append(kindLabel)
-                        .append(" | 이름=").append(e.name)
-                        .append('\n')
-                }
-            }
-            val prompt = """
-                당신은 잠금화면 위젯 추천 도우미입니다.
-                사용자 요구: "${userQuery.trim()}"
-
-                아래 목록에서 사용자 요구를 잘 도와줄 항목들을 골라 주세요.
-                반드시 JSON으로만 응답하세요. 다른 설명 없이 JSON만.
-
-                응답 스키마:
-                {"selected": ["<id>", "<id>", ...]}
-
-                항목 목록:
-                $listText
-            """.trimIndent()
-            val raw = callGemini(prompt)
-            parseSelectedIds(raw)
-        }
-
     suspend fun recommendWidgets(
         userQuery: String,
         trayCandidates: List<LockWidget>,
@@ -114,7 +81,18 @@ object GeminiClient {
             당신은 잠금화면 위젯 배치 도우미입니다.
             사용자 요구: "${userQuery.trim()}"
 
-            세 영역에 배치할 위젯/바로가기를 추천해 주세요.
+            아래 전체 후보 목록에서 사용자 요구에 맞는 위젯/바로가기를 "위젯 단위"로
+            직접 골라 세 영역에 배치해 주세요. (앱을 먼저 거르지 말고 개별 위젯을 보세요.)
+
+            ⚠️ 후보를 고를 때 반드시 지킬 것:
+            - 앱 이름이 아니라 각 위젯/바로가기의 "기능과 이름"을 보고 판단하세요.
+              예) 메신저 앱(카카오톡 등) 안에도 캘린더·날씨 같은 유용한 위젯이 들어있을 수
+              있습니다. 앱 자체가 요구와 무관해 보여도, 그 안의 위젯이 도움이 되면
+              절대 건너뛰지 말고 골라 주세요.
+            - 전체 목록을 끝까지 훑어본 뒤, 사용자 요구에 실제로 도움이 되는 것만 선택하세요.
+            - 비슷한 기능의 위젯이 여러 개면 다양성을 고려해 골고루 추천하세요.
+
+            영역 설명:
             - 트레이 영역: 작은 위젯 슬롯(권한 없는 영역이므로 mock 위젯 사용).
               SMALL=1칸, WIDE=2칸. 총 합계 4칸을 넘지 마세요.
             - 자유 배치 영역: 실제 설치된 앱의 위젯들. id 는 반드시 component
@@ -519,14 +497,6 @@ object GeminiClient {
             sb.append(parts.getJSONObject(i).optString("text", ""))
         }
         return sb.toString()
-    }
-
-    private fun parseSelectedIds(text: String): List<String> {
-        val payload = sanitizeJson(text)
-        val obj = runCatching { JSONObject(payload) }.getOrNull()
-            ?: throw LlmException("LLM 응답 파싱 실패: $text")
-        val arr = obj.optJSONArray("selected") ?: return emptyList()
-        return List(arr.length()) { arr.optString(it).orEmpty() }.filter { it.isNotBlank() }
     }
 
     private fun parseRecommendation(text: String): LlmRecommendation {

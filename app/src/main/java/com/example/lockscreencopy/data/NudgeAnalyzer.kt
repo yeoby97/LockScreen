@@ -49,7 +49,7 @@ data class NudgeResult(
 object NudgeAnalyzer {
 
     private const val TAG = "NudgeAnalyzer"
-    private const val MODEL = "gemini-2.5-flash-lite"
+    private const val MODEL = "gemini-3.1-flash-lite"
     private const val ENDPOINT =
         "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent"
 
