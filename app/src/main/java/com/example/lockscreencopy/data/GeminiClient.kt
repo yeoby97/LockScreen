@@ -24,7 +24,7 @@ data class LlmRecommendation(
 
 object GeminiClient {
     // TODO: 실제 키로 교체하세요. (현재는 임시 하드코딩 상수)
-    private const val API_KEY: String = "YOUR_GEMINI_API_KEY"
+    private const val API_KEY: String = "AIzaSyBbCkbIIb__lKf1FYfuozm_ks7PVhHi1B4"
     private const val MODEL = "gemini-3-flash-preview"
     private const val ENDPOINT =
         "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent"
