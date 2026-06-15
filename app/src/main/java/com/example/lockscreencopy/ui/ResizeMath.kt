@@ -5,7 +5,6 @@ import android.os.Build
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import com.example.lockscreencopy.model.AiSketchWidget
 import com.example.lockscreencopy.model.FloatingWidget
 import com.example.lockscreencopy.model.HostedAppWidget
 import com.example.lockscreencopy.model.WidgetSize
@@ -51,29 +50,6 @@ internal fun resizeFloatingWidget(
         scaleX = newScaleX,
         scaleY = newScaleY,
         offset = Offset(fw.offset.x - dwPx * anchorX, fw.offset.y - dhPx * anchorY),
-    )
-}
-
-internal fun resizeAiSketchWidget(
-    widget: AiSketchWidget,
-    deltaX: Float,
-    deltaY: Float,
-    anchorX: Float,
-    anchorY: Float,
-    density: Density,
-): AiSketchWidget {
-    val minScaleX = (80f / widget.widthDp).coerceIn(0.2f, 1f)
-    val minScaleY = (80f / widget.heightDp).coerceIn(0.2f, 1f)
-    val newScaleX = (widget.scaleX + deltaX).coerceIn(minScaleX, 3f)
-    val newScaleY = (widget.scaleY + deltaY).coerceIn(minScaleY, 3f)
-    val realDeltaX = newScaleX - widget.scaleX
-    val realDeltaY = newScaleY - widget.scaleY
-    val dwPx = with(density) { widget.widthDp.dp.toPx() } * realDeltaX
-    val dhPx = with(density) { widget.heightDp.dp.toPx() } * realDeltaY
-    return widget.copy(
-        scaleX = newScaleX,
-        scaleY = newScaleY,
-        offset = Offset(widget.offset.x - dwPx * anchorX, widget.offset.y - dhPx * anchorY),
     )
 }
 

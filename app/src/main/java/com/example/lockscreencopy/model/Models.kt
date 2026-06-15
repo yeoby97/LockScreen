@@ -91,47 +91,6 @@ data class HostedAppWidget(
     val spaceId: String? = null,
 )
 
-/** 정보 값의 출처. REAL=실제 시스템 데이터, SAMPLE=샘플/더미 값. */
-enum class InfoSource { REAL, SAMPLE }
-
-/** 사용자 입력 정보 항목을 실제 데이터 소스로 해석한 결과. */
-data class ResolvedInfoItem(
-    val label: String,
-    val value: String,
-    val source: InfoSource,
-)
-
-/**
- * 위젯 이미지 위에 오버레이될 텍스트 슬롯 하나.
- * 위치/크기는 모두 위젯 너비·높이 대비 0.0~1.0 상대 비율.
- */
-data class AiTextSlot(
-    val label: String,          // 정보 범주 레이블 (예: "온도")
-    val value: String,          // 표시할 값 (예: "23°C")
-    val role: String,           // "title" | "main" | "sub" | "extra"
-    val xRatio: Float,          // 좌측 시작 x 비율
-    val yRatio: Float,          // 상단 시작 y 비율
-    val widthRatio: Float,
-    val heightRatio: Float,
-    val fontScale: Float = 1f,
-    val anchorObject: String = "",              // 이 슬롯이 붙어있는 이미지 오브젝트 (디버깅/개선용)
-    val source: InfoSource = InfoSource.SAMPLE, // 값 출처
-)
-
-/** AI 스케치로 생성된 이미지 위젯. Imagen 이미지 + 슬롯 기반 텍스트 오버레이. */
-data class AiSketchWidget(
-    val uid: String,
-    val imageBitmap: android.graphics.Bitmap?,
-    val textSlots: List<AiTextSlot>,
-    val offset: Offset,
-    val widthDp: Float,
-    val heightDp: Float,
-    val scaleX: Float = 1f,
-    val scaleY: Float = 1f,
-    /** 소속된 위젯 공간 id. null이면 잠금화면에 자유 배치된 상태. */
-    val spaceId: String? = null,
-)
-
 /**
  * 위젯 공간 내부에서 멤버 위젯 하나의 배치 정보.
  * [offset]은 공간 캔버스(dp) 기준 좌상단 좌표이며, 스케일은 위젯 기본 크기에 곱해진다.

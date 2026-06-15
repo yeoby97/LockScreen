@@ -17,12 +17,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import com.example.lockscreencopy.model.AiSketchWidget
 import com.example.lockscreencopy.model.FloatingWidget
 import com.example.lockscreencopy.model.HostedAppWidget
 import com.example.lockscreencopy.model.SpaceItemLayout
 import com.example.lockscreencopy.model.WidgetSize
-import com.example.lockscreencopy.ui.widget.AiSketchStatic
 import com.example.lockscreencopy.ui.widget.WidgetCell
 
 /** 위젯 공간의 가상 캔버스 크기(dp). 확장 뷰·버블이 같은 고정 좌표계를 공유하므로,
@@ -67,7 +65,6 @@ fun contentBoundsDp(
 fun SpaceMember.baseSizeDp(densityScale: Float): Pair<Float, Float> = when (this) {
     is SpaceMember.Floating ->
         (if (widget.widget.size == WidgetSize.WIDE) 180f else 100f) to 100f
-    is SpaceMember.Ai -> widget.widthDp to widget.heightDp
     is SpaceMember.Hosted -> (widget.widthPx / densityScale) to (widget.heightPx / densityScale)
 }
 
@@ -119,12 +116,6 @@ sealed interface SpaceMember {
         override val aspectW get() = widget.widthPx.toFloat().coerceAtLeast(1f)
         override val aspectH get() = widget.heightPx.toFloat().coerceAtLeast(1f)
     }
-
-    data class Ai(val widget: AiSketchWidget) : SpaceMember {
-        override val uid get() = widget.uid
-        override val aspectW get() = widget.widthDp.coerceAtLeast(1f)
-        override val aspectH get() = widget.heightDp.coerceAtLeast(1f)
-    }
 }
 
 /**
@@ -143,9 +134,6 @@ fun SpaceMemberView(
     when (member) {
         is SpaceMember.Floating ->
             WidgetCell(widget = member.widget.widget, modifier = modifier)
-
-        is SpaceMember.Ai ->
-            AiSketchStatic(widget = member.widget, modifier = modifier, showSlots = !compact)
 
         is SpaceMember.Hosted -> {
             val host = appWidgetHost

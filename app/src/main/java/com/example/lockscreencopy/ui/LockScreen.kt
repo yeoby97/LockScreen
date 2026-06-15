@@ -87,7 +87,6 @@ import com.example.lockscreencopy.model.HostedAppWidget
 import com.example.lockscreencopy.model.PlacedWidget
 import com.example.lockscreencopy.model.WidgetSize
 import com.example.lockscreencopy.data.CustomMessagePublisher
-import com.example.lockscreencopy.data.DataSourceResolver
 import com.example.lockscreencopy.data.GeminiClient
 import com.example.lockscreencopy.data.handleSystemAction
 import com.example.lockscreencopy.data.hasUsageStatsPermission
@@ -104,7 +103,6 @@ import com.example.lockscreencopy.data.executeChatNudgeAction
 import com.example.lockscreencopy.data.sampleChats
 import com.example.lockscreencopy.data.toAppGroups
 import com.example.lockscreencopy.data.topUsedAppsWithGap
-import com.example.lockscreencopy.model.AiSketchWidget
 import com.example.lockscreencopy.model.WidgetSpace
 import com.example.lockscreencopy.model.ChatMessage
 import com.example.lockscreencopy.ui.notification.ChatNotificationStack
@@ -119,9 +117,6 @@ import com.example.lockscreencopy.ui.llm.ShortcutRecommendationBadge
 import com.example.lockscreencopy.ui.llm.StripAppEntry
 import com.example.lockscreencopy.ui.llm.placeGhostRects
 import com.example.lockscreencopy.ui.llm.realWidgetGhostKey
-import com.example.lockscreencopy.ui.sketch.PendingSketch
-import com.example.lockscreencopy.ui.sketch.SketchModeOverlay
-import com.example.lockscreencopy.ui.sketch.SlotAdjustOverlay
 import com.example.lockscreencopy.model.SpaceItemLayout
 import com.example.lockscreencopy.ui.space.SpaceCanvas
 import com.example.lockscreencopy.ui.space.SpaceMember
@@ -130,7 +125,6 @@ import com.example.lockscreencopy.ui.space.resizeSpaceItem
 import com.example.lockscreencopy.ui.space.SpaceSketchOverlay
 import com.example.lockscreencopy.ui.space.WidgetSpaceBubble
 import com.example.lockscreencopy.ui.space.WidgetSpaceExpanded
-import com.example.lockscreencopy.ui.widget.AiSketchWidgetItem
 import com.example.lockscreencopy.ui.widget.toBitmapSafe
 import com.example.lockscreencopy.ui.picker.BottomShortcutPickerSheet
 import com.example.lockscreencopy.ui.picker.FavoriteAppsPickerScreen
@@ -158,10 +152,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlin.math.roundToInt
-import android.graphics.BitmapFactory
-import android.widget.Toast
-import com.example.lockscreencopy.model.AiTextSlot
-import com.example.lockscreencopy.model.InfoSource
 
 /**
  * floating(편집) 모드 축소 배율. 클수록(1에 가까울수록) 카드가 커져 상·하·좌우 여백이 함께 줄어든다.
@@ -258,14 +248,6 @@ fun LockScreen(
 
     var showLlmSheet by remember { mutableStateOf(false) }
     var llmSuggestion by remember { mutableStateOf<LlmSuggestionResult?>(null) }
-
-    var sketchMode by remember { mutableStateOf(false) }
-    var sketchLoading by remember { mutableStateOf(false) }
-    var sketchError by remember { mutableStateOf<String?>(null) }
-    var aiSketchWidgets by remember { mutableStateOf<List<AiSketchWidget>>(emptyList()) }
-    var aiSketchCounter by remember { mutableStateOf(0) }
-    var pendingSketchAdjust by remember { mutableStateOf<PendingSketch?>(null) }
-    val sketchScope = rememberCoroutineScope()
 
     // 위젯 공간(여러 위젯을 묶는 유리 버블)
     var widgetSpaces by remember { mutableStateOf<List<WidgetSpace>>(emptyList()) }
@@ -449,12 +431,6 @@ fun LockScreen(
         if (idx != -1) hostedWidgets[idx] = resizeHostedWidget(hostedWidgets[idx], dx, dy, ax, ay, density.density)
     }
 
-    fun resizeAiSketch(uid: String, dx: Float, dy: Float, ax: Float, ay: Float) {
-        aiSketchWidgets = aiSketchWidgets.map { w ->
-            if (w.uid != uid) w else resizeAiSketchWidget(w, dx, dy, ax, ay, density)
-        }
-    }
-
     val scale by animateFloatAsState(
         targetValue = if (isFloating) FLOAT_SCALE else 1f,
         animationSpec = tween(500, easing = FastOutSlowInEasing), label = "scale",
@@ -585,26 +561,18 @@ fun LockScreen(
         hw.offset.y + hw.heightPx * hw.scaleY,
     )
 
-    fun aiRect(w: AiSketchWidget): Rect {
-        val wp = with(density) { (w.widthDp * w.scaleX).dp.toPx() }
-        val hp = with(density) { (w.heightDp * w.scaleY).dp.toPx() }
-        return Rect(w.offset.x, w.offset.y, w.offset.x + wp, w.offset.y + hp)
-    }
-
     // 화면 좌표 사각형에 겹치는, 아직 어느 공간에도 속하지 않은 자유 위젯 개수
     fun freeWidgetsInRect(screenRect: Rect): Int {
         val local = screenRectToLocal(screenRect)
         var n = 0
         n += floatingWidgets.count { it.spaceId == null && floatingRect(it).overlaps(local) }
         n += hostedWidgets.count { it.spaceId == null && hostedRect(it).overlaps(local) }
-        n += aiSketchWidgets.count { it.spaceId == null && aiRect(it).overlaps(local) }
         return n
     }
 
     fun membersOf(spaceId: String): List<SpaceMember> = buildList {
         floatingWidgets.filter { it.spaceId == spaceId }.forEach { add(SpaceMember.Floating(it)) }
         hostedWidgets.filter { it.spaceId == spaceId }.forEach { add(SpaceMember.Hosted(it)) }
-        aiSketchWidgets.filter { it.spaceId == spaceId }.forEach { add(SpaceMember.Ai(it)) }
     }
 
     // 위젯의 잠금화면 위치를 스케치 영역 기준 상대좌표로 환산 → 공간 캔버스(dp) 좌표로 매핑.
@@ -634,16 +602,10 @@ fun LockScreen(
                 layouts[hw.uid] = seedLayout(hostedRect(hw), local, hw.scaleX, hw.scaleY)
             }
         }
-        aiSketchWidgets.forEach { w ->
-            if (w.spaceId == null && aiRect(w).overlaps(local)) {
-                layouts[w.uid] = seedLayout(aiRect(w), local, w.scaleX, w.scaleY)
-            }
-        }
         if (layouts.isEmpty()) return emptyMap()
 
         val ids = layouts.keys
         floatingWidgets = floatingWidgets.map { if (it.uid in ids) it.copy(spaceId = id) else it }
-        aiSketchWidgets = aiSketchWidgets.map { if (it.uid in ids) it.copy(spaceId = id) else it }
         for (i in hostedWidgets.indices) {
             if (hostedWidgets[i].uid in ids) hostedWidgets[i] = hostedWidgets[i].copy(spaceId = id)
         }
@@ -691,14 +653,12 @@ fun LockScreen(
     fun spaceMemberByUid(uid: String): SpaceMember? {
         floatingWidgets.firstOrNull { it.uid == uid }?.let { return SpaceMember.Floating(it) }
         hostedWidgets.firstOrNull { it.uid == uid }?.let { return SpaceMember.Hosted(it) }
-        aiSketchWidgets.firstOrNull { it.uid == uid }?.let { return SpaceMember.Ai(it) }
         return null
     }
 
     // 멤버 위젯 1개를 공간에서 빼 잠금화면 자유 배치로 복귀(원래 위치 유지) + 레이아웃 제거
     fun removeMemberFromSpace(spaceId: String, uid: String) {
         floatingWidgets = floatingWidgets.map { if (it.uid == uid) it.copy(spaceId = null) else it }
-        aiSketchWidgets = aiSketchWidgets.map { if (it.uid == uid) it.copy(spaceId = null) else it }
         for (i in hostedWidgets.indices) {
             if (hostedWidgets[i].uid == uid) hostedWidgets[i] = hostedWidgets[i].copy(spaceId = null)
         }
@@ -735,7 +695,6 @@ fun LockScreen(
     // 공간 삭제: 멤버 위젯들은 잠금화면 자유 배치로 되돌리고(원래 위치 유지) 버블만 제거
     fun deleteSpace(id: String) {
         floatingWidgets = floatingWidgets.map { if (it.spaceId == id) it.copy(spaceId = null) else it }
-        aiSketchWidgets = aiSketchWidgets.map { if (it.spaceId == id) it.copy(spaceId = null) else it }
         for (i in hostedWidgets.indices) {
             if (hostedWidgets[i].spaceId == id) hostedWidgets[i] = hostedWidgets[i].copy(spaceId = null)
         }
@@ -958,34 +917,6 @@ fun LockScreen(
                         },
                     )
                 }
-            }
-
-            // AI 스케치로 생성된 이미지 위젯 목록 표시
-            aiSketchWidgets.filter { it.spaceId == null }.forEach { w ->
-                AiSketchWidgetItem(
-                    widget = w,
-                    isFloating = isFloating,
-                    isSelected = selectedFloatingUid == w.uid,
-                    onSelectToggle = {
-                        selectedFloatingUid = if (selectedFloatingUid == w.uid) null else w.uid
-                    },
-                    onDrag = { drag ->
-                        aiSketchWidgets = aiSketchWidgets.map {
-                            if (it.uid == w.uid) it.copy(offset = it.offset + drag) else it
-                        }
-                    },
-                    onResize = { dx, dy, ax, ay -> resizeAiSketch(w.uid, dx, dy, ax, ay) },
-                    onDelete = {
-                        if (selectedFloatingUid == w.uid) selectedFloatingUid = null
-                        aiSketchWidgets = aiSketchWidgets.filter { it.uid != w.uid }
-                    },
-                    onSlotClick = { slot ->
-                        val sourceTag = if (slot.source == InfoSource.REAL) "REAL" else "SAMPLE"
-                        val msg = "[${slot.label}] ${slot.value}  ($sourceTag)"
-                        android.util.Log.d("AiSlot", msg)
-                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                    },
-                )
             }
 
             if (favoriteAppsEnabled && displayedFavorites.isNotEmpty()) {
@@ -1279,7 +1210,7 @@ fun LockScreen(
             )
         }
 
-        if (!isFloating && llmSuggestion == null && !sketchMode) {
+        if (!isFloating && llmSuggestion == null) {
             FloatingActionButton(
                 onClick = { showLlmSheet = true },
                 containerColor = LockTokens.Accent,
@@ -1381,91 +1312,6 @@ fun LockScreen(
                 onSelect = { info ->
                     showRealWidgetPicker = false
                     onRealWidgetSelected(info, availableOffsetFor(info))
-                },
-            )
-        }
-
-        pendingSketchAdjust?.let { pending ->
-            SlotAdjustOverlay(
-                pending = pending,
-                onConfirm = { adjustedSlots ->
-                    aiSketchCounter++
-                    aiSketchWidgets = aiSketchWidgets + AiSketchWidget(
-                        uid = "ai_sketch_$aiSketchCounter",
-                        imageBitmap = pending.bitmap,
-                        textSlots = adjustedSlots,
-                        offset = Offset(pending.widgetRect.left, pending.widgetRect.top),
-                        widthDp = pending.widthDp,
-                        heightDp = pending.heightDp,
-                    )
-                    if (!isFloating) {
-                        clockOffset = savedClockOffset
-                        isFloating = true
-                    }
-                    pendingSketchAdjust = null
-                },
-                onCancel = { pendingSketchAdjust = null },
-            )
-        }
-
-        if (sketchMode) {
-            SketchModeOverlay(
-                loading = sketchLoading,
-                error = sketchError,
-                onCancel = {
-                    sketchMode = false
-                    sketchLoading = false
-                    sketchError = null
-                },
-                onConfirm = { rect, infoQuery, imageShape ->
-                    sketchError = null
-                    sketchLoading = true
-                    sketchScope.launch {
-                        try {
-                            val aspectRatio = (rect.right - rect.left) / (rect.bottom - rect.top)
-
-                            // 1. LLM이 자연어 정보 입력 → (레이블, 샘플값) 쌍 목록으로 파싱
-                            val parsedItems = GeminiClient.parseInfoItems(infoQuery)
-                            if (parsedItems.isEmpty()) {
-                                sketchError = "정보 항목을 파악할 수 없어요. 다시 입력해 보세요."
-                                sketchLoading = false
-                                return@launch
-                            }
-
-                            // 1b. 실제 데이터 소스 해석 (배터리/시간/날짜는 실제값, 나머지는 샘플값 유지)
-                            val resolvedItems = DataSourceResolver.resolve(context, parsedItems)
-
-                            // 2. text pad 위치가 있는 위젯 스킨 장면 설계
-                            val scene = GeminiClient.designSketchScene(
-                                infoItems = resolvedItems,
-                                imageShape = imageShape,
-                                aspectRatio = aspectRatio,
-                            )
-                            val slots = scene.slots
-
-                            // 3. 투명 배경 + 글자 없는 이미지 생성 (텍스트는 앱이 슬롯 위에 얹음)
-                            val imageBytes = GeminiClient.generateWidgetImage(scene.imagePrompt)
-                            val bitmap = withContext(Dispatchers.Default) {
-                                BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-                            }
-
-                            // 4. 생성 결과를 슬롯 보정 대기 상태로 저장 — 바로 확정하지 않음
-                            val widthDp = with(density) { (rect.right - rect.left).toDp().value }
-                            val heightDp = with(density) { (rect.bottom - rect.top).toDp().value }
-                            pendingSketchAdjust = PendingSketch(
-                                bitmap = bitmap,
-                                initialSlots = slots,
-                                widgetRect = rect,
-                                widthDp = widthDp,
-                                heightDp = heightDp,
-                            )
-                            sketchLoading = false
-                            sketchMode = false
-                        } catch (t: Throwable) {
-                            sketchLoading = false
-                            sketchError = t.message ?: t.toString()
-                        }
-                    }
                 },
             )
         }
