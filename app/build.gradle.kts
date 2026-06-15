@@ -1,6 +1,19 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+}
+
+// local.properties(gitignore됨) 또는 환경변수에서 Gemini API 키를 읽는다.
+// 데모는 클라우드 Gemini API를 호출하지만 UI상으론 "온디바이스 AI"로 표현한다.
+val geminiApiKey: String = run {
+    val props = Properties()
+    rootProject.file("local.properties").takeIf { it.exists() }
+        ?.inputStream()?.use { props.load(it) }
+    props.getProperty("GEMINI_API_KEY")
+        ?: System.getenv("GEMINI_API_KEY")
+        ?: ""
 }
 
 android {
@@ -19,6 +32,8 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
     }
 
     buildTypes {
@@ -36,6 +51,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -49,6 +65,10 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.okhttp)
+    implementation(libs.kotlinx.coroutines.android)
+    // 온디바이스 Gemini Nano 자유 프롬프트(ML Kit GenAI Prompt API).
+    implementation(libs.mlkit.genai.prompt)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

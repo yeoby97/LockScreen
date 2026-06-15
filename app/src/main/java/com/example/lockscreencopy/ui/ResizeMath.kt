@@ -1,11 +1,33 @@
 package com.example.lockscreencopy.ui
 
+import android.appwidget.AppWidgetProviderInfo
+import android.os.Build
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import com.example.lockscreencopy.model.AiSketchWidget
 import com.example.lockscreencopy.model.FloatingWidget
 import com.example.lockscreencopy.model.HostedAppWidget
 import com.example.lockscreencopy.model.WidgetSize
+
+/**
+ * 위젯이 실제로 호스트될 때의 크기(dp). ghost(추천 미리보기) 크기를 이 값에
+ * 맞춰야 사용자가 ghost 를 탭한 직후 자리/크기가 변하지 않는다.
+ */
+internal fun resolveWidgetSizeDp(info: AppWidgetProviderInfo, densityScale: Float): Pair<Int, Int> {
+    val cellDp = 70
+    var wDp = (info.minWidth / densityScale).toInt()
+    var hDp = (info.minHeight / densityScale).toInt()
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (info.targetCellWidth > 0) wDp = maxOf(wDp, info.targetCellWidth * cellDp)
+        if (info.targetCellHeight > 0) hDp = maxOf(hDp, info.targetCellHeight * cellDp)
+    }
+    if (wDp <= 0) wDp = (info.minResizeWidth / densityScale).toInt()
+    if (hDp <= 0) hDp = (info.minResizeHeight / densityScale).toInt()
+    if (wDp <= 0) wDp = 110
+    if (hDp <= 0) hDp = 110
+    return wDp to hDp
+}
 
 internal fun resizeFloatingWidget(
     fw: FloatingWidget,
@@ -29,6 +51,29 @@ internal fun resizeFloatingWidget(
         scaleX = newScaleX,
         scaleY = newScaleY,
         offset = Offset(fw.offset.x - dwPx * anchorX, fw.offset.y - dhPx * anchorY),
+    )
+}
+
+internal fun resizeAiSketchWidget(
+    widget: AiSketchWidget,
+    deltaX: Float,
+    deltaY: Float,
+    anchorX: Float,
+    anchorY: Float,
+    density: Density,
+): AiSketchWidget {
+    val minScaleX = (80f / widget.widthDp).coerceIn(0.2f, 1f)
+    val minScaleY = (80f / widget.heightDp).coerceIn(0.2f, 1f)
+    val newScaleX = (widget.scaleX + deltaX).coerceIn(minScaleX, 3f)
+    val newScaleY = (widget.scaleY + deltaY).coerceIn(minScaleY, 3f)
+    val realDeltaX = newScaleX - widget.scaleX
+    val realDeltaY = newScaleY - widget.scaleY
+    val dwPx = with(density) { widget.widthDp.dp.toPx() } * realDeltaX
+    val dhPx = with(density) { widget.heightDp.dp.toPx() } * realDeltaY
+    return widget.copy(
+        scaleX = newScaleX,
+        scaleY = newScaleY,
+        offset = Offset(widget.offset.x - dwPx * anchorX, widget.offset.y - dhPx * anchorY),
     )
 }
 

@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.example.lockscreencopy.model.FloatingWidget
 import com.example.lockscreencopy.model.WidgetSize
+import com.example.lockscreencopy.ui.theme.LockTokens
 import kotlin.math.roundToInt
 
 @Composable
@@ -59,7 +60,11 @@ fun FloatingWidgetItem(
         if (isFloating) {
             Box(
                 modifier = Modifier.matchParentSize()
-                    .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(12.dp)),
+                    .border(
+                        1.dp,
+                        if (isSelected) LockTokens.BorderStrong else LockTokens.Border,
+                        RoundedCornerShape(14.dp),
+                    ),
             )
         }
 

@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.lockscreencopy.model.BottomShortcut
 import com.example.lockscreencopy.model.FavoriteAppsLayout
+import com.example.lockscreencopy.ui.theme.LockTokens
 import com.example.lockscreencopy.ui.widget.toBitmapSafe
 
 const val MAX_FAVORITES = 6
@@ -52,12 +53,15 @@ fun FavoriteAppsSettingsSheet(
     onLayoutChange: (FavoriteAppsLayout) -> Unit,
     onOpenPicker: () -> Unit,
     onDismiss: () -> Unit,
+    usageSortEnabled: Boolean,
+    onUsageSortChange: (Boolean) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF2C2C2E),
+        containerColor = LockTokens.SheetBg,
+        shape = LockTokens.SheetShape,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 32.dp),
@@ -76,7 +80,7 @@ fun FavoriteAppsSettingsSheet(
                     onCheckedChange = onEnabledChange,
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
-                        checkedTrackColor = Color(0xFF1976D2),
+                        checkedTrackColor = LockTokens.Accent,
                         uncheckedThumbColor = Color.White,
                         uncheckedTrackColor = Color(0xFF5A5A5C),
                     ),
@@ -104,7 +108,34 @@ fun FavoriteAppsSettingsSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "사용시간 기반 동기화",
+                        color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        "최근 일주일 사용시간 순으로 표시 (간격이 크면 일부만 노출)",
+                        color = Color(0xFF8E8E93), fontSize = 12.sp,
+                    )
+                }
+                Switch(
+                    checked = usageSortEnabled,
+                    onCheckedChange = onUsageSortChange,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = LockTokens.Accent,
+                        uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = Color(0xFF5A5A5C),
+                    ),
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
             Text("정렬", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -173,7 +204,7 @@ private fun LayoutOption(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    val border = if (selected) Color(0xFFB39DDB) else Color.White.copy(alpha = 0.15f)
+    val border = if (selected) LockTokens.Accent else Color.White.copy(alpha = 0.15f)
     Box(
         modifier = modifier
             .height(90.dp)
@@ -192,7 +223,7 @@ private fun LayoutPreviewBottomLeft() {
             modifier = Modifier.align(Alignment.BottomStart),
             horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            repeat(4) { Dot() }
+            repeat(3) { Dot() }
         }
     }
 }

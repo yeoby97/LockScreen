@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -82,47 +83,52 @@ fun RealWidgetPickerSheet(
     }
     val expanded = remember { mutableStateMapOf<String, Boolean>() }
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = Color(0xFF1C1C1E),
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
-            Text(
-                "앱 위젯",
-                fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            )
-            if (groups.isEmpty()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(bottom = 48.dp),
+        ) {
+            item {
                 Text(
-                    "설치된 위젯이 없습니다",
-                    color = Color(0xFF8E8E93), fontSize = 14.sp,
-                    modifier = Modifier.padding(16.dp),
+                    "앱 위젯",
+                    fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 )
             }
-            LazyColumn(modifier = Modifier.fillMaxWidth().height(560.dp)) {
-                items(groups, key = { it.packageName }) { group ->
-                    val isOpen = expanded[group.packageName] ?: false
-                    AppHeaderRow(
-                        group = group,
-                        isOpen = isOpen,
-                        onToggle = { expanded[group.packageName] = !isOpen },
-                    )
-                    if (isOpen) {
-                        WidgetPreviewRow(
-                            providers = group.providers,
-                            pm = pm,
-                            ctx = ctx,
-                            densityDpi = densityDpi,
-                            onSelect = onSelect,
-                        )
-                    }
-                    Divider(
-                        color = Color.White.copy(alpha = 0.08f), thickness = 0.5.dp,
-                        modifier = Modifier.padding(start = 16.dp),
+            if (groups.isEmpty()) {
+                item {
+                    Text(
+                        "설치된 위젯이 없습니다",
+                        color = Color(0xFF8E8E93), fontSize = 14.sp,
+                        modifier = Modifier.padding(16.dp),
                     )
                 }
+            }
+            items(groups, key = { it.packageName }) { group ->
+                val isOpen = expanded[group.packageName] ?: false
+                AppHeaderRow(
+                    group = group,
+                    isOpen = isOpen,
+                    onToggle = { expanded[group.packageName] = !isOpen },
+                )
+                if (isOpen) {
+                    WidgetPreviewRow(
+                        providers = group.providers,
+                        pm = pm,
+                        ctx = ctx,
+                        densityDpi = densityDpi,
+                        onSelect = onSelect,
+                    )
+                }
+                Divider(
+                    color = Color.White.copy(alpha = 0.08f), thickness = 0.5.dp,
+                    modifier = Modifier.padding(start = 16.dp),
+                )
             }
         }
     }

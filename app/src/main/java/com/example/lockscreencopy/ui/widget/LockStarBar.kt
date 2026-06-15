@@ -1,19 +1,25 @@
 package com.example.lockscreencopy.ui.widget
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -21,44 +27,62 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+private val BarShape = RoundedCornerShape(28.dp)
+private val barTimeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
 
 @Composable
 fun LockStarBar(modifier: Modifier = Modifier) {
+    var currentTime by remember { mutableStateOf(barTimeFmt.format(Date())) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000L)
+            currentTime = barTimeFmt.format(Date())
+        }
+    }
+
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(30.dp))
-            .background(Color(0xFF101A4D))
-            .height(60.dp)
-            .width(220.dp)
-            .padding(horizontal = 10.dp),
+            .clip(BarShape)
+            .background(Color(0xFF1A2E8A).copy(alpha = 0.55f))
+            .border(1.dp, Color.White.copy(alpha = 0.25f), BarShape)
+            .height(56.dp)
+            .padding(horizontal = 22.dp),
         contentAlignment = Alignment.Center,
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .height(40.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.White.copy(alpha = 0.10f))
-                    .padding(horizontal = 8.dp),
-                contentAlignment = Alignment.Center,
+            // 시간(위) + 자물쇠(아래) 세로 배치
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text("12:45", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Icon(
-                        imageVector = Icons.Filled.Lock,
-                        contentDescription = null,
-                        tint = Color(0xFFFF4D8D),
-                        modifier = Modifier.size(14.dp),
-                    )
-                }
+                Text(
+                    text = currentTime,
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 11.sp,
+                )
+                Icon(
+                    imageVector = Icons.Filled.Lock,
+                    contentDescription = null,
+                    tint = Color(0xFFFF4D8D),
+                    modifier = Modifier.size(10.dp),
+                )
             }
-            Text("LockStar", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text(
+                text = "LockStar",
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+            )
         }
     }
 }

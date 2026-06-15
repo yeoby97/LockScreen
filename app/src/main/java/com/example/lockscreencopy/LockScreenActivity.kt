@@ -20,8 +20,12 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.example.lockscreencopy.model.HostedAppWidget
 import com.example.lockscreencopy.ui.LockScreen
+import com.example.lockscreencopy.ui.resolveWidgetSizeDp
 import com.example.lockscreencopy.ui.theme.LockScreenCopyTheme
 
 class LockScreenActivity : ComponentActivity() {
@@ -30,21 +34,37 @@ class LockScreenActivity : ComponentActivity() {
     private lateinit var appWidgetHost: AppWidgetHost
 
     private val hostedWidgets: SnapshotStateList<HostedAppWidget> = mutableStateListOf()
+    private val pendingOffsetsByWidgetId = mutableMapOf<Int, Offset>()
+    private val pendingComponentsByWidgetId = mutableMapOf<Int, String>()
+    // 바인딩 거부로 취소된 위젯 component (LockScreen 이 관찰해 추천 ghost 복원)
+    private val cancelledComponents: SnapshotStateList<String> = mutableStateListOf()
+    // bind/configure 화면으로 넘어간 위젯 id. 취소 시 result.data 가 null 이라 이 값으로 복구한다.
+    private var inFlightWidgetId: Int = -1
 
     private val bindWidgetLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
-        val id = result.data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
-        if (result.resultCode == Activity.RESULT_OK && id != -1) configureOrAdd(id)
-        else if (id != -1) appWidgetHost.deleteAppWidgetId(id)
+        val id = resolveResultWidgetId(result.data)
+        inFlightWidgetId = -1
+        if (id == -1) return@registerForActivityResult
+        if (result.resultCode == Activity.RESULT_OK) configureOrAdd(id)
+        else cancelPending(id)
     }
 
     private val configureWidgetLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
-        val id = result.data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
-        if (result.resultCode == Activity.RESULT_OK && id != -1) addHostedWidget(id)
-        else if (id != -1) appWidgetHost.deleteAppWidgetId(id)
+        val id = resolveResultWidgetId(result.data)
+        inFlightWidgetId = -1
+        if (id == -1) return@registerForActivityResult
+        if (result.resultCode == Activity.RESULT_OK) addHostedWidget(id)
+        else cancelPending(id)
+    }
+
+    // 취소 시 result.data 가 null 이므로 진행 중 id 로 폴백한다.
+    private fun resolveResultWidgetId(data: Intent?): Int {
+        val fromData = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
+        return if (fromData != -1) fromData else inFlightWidgetId
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -54,6 +74,7 @@ class LockScreenActivity : ComponentActivity() {
         appWidgetHost = AppWidgetHost(this, HOST_ID)
         setShowWhenLocked(true)
         setTurnScreenOn(true)
+        hideNavigationBar()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             keyguardManager.requestDismissKeyguard(this, null)
         }
@@ -67,10 +88,26 @@ class LockScreenActivity : ComponentActivity() {
                         appWidgetManager = appWidgetManager,
                         onRealWidgetSelected = ::onProviderSelected,
                         onRemoveHosted = ::removeHosted,
+                        cancelledRealComponents = cancelledComponents,
                     )
                 }
             }
         }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // 위젯 바인딩/설정 등 다른 화면을 다녀오면 내비게이션 바가 다시 보일 수 있어 재적용한다.
+        if (hasFocus) hideNavigationBar()
+    }
+
+    // 잠금화면처럼 하단 내비게이션 바(홈·뒤로·최근 버튼)만 숨긴다. 상단 상태바(시계/배터리)는 유지.
+    // 가장자리를 스와이프하면 잠깐 나타났다가 자동으로 다시 숨는다.
+    private fun hideNavigationBar() {
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller.hide(WindowInsetsCompat.Type.navigationBars())
     }
 
     override fun onStart() {
@@ -87,26 +124,8 @@ class LockScreenActivity : ComponentActivity() {
         Toast.makeText(this, "Device unlocked!", Toast.LENGTH_SHORT).show()
     }
 
-    private fun resolveWidgetSizeDp(info: AppWidgetProviderInfo): Pair<Int, Int> {
-        val d = resources.displayMetrics.density
-        val cellDp = 70
-
-        var wDp = (info.minWidth / d).toInt()
-        var hDp = (info.minHeight / d).toInt()
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (info.targetCellWidth > 0) wDp = maxOf(wDp, info.targetCellWidth * cellDp)
-            if (info.targetCellHeight > 0) hDp = maxOf(hDp, info.targetCellHeight * cellDp)
-        }
-
-        if (wDp <= 0) wDp = (info.minResizeWidth / d).toInt()
-        if (hDp <= 0) hDp = (info.minResizeHeight / d).toInt()
-
-        if (wDp <= 0) wDp = 110
-        if (hDp <= 0) hDp = 110
-
-        return wDp to hDp
-    }
+    private fun resolveWidgetSizeDp(info: AppWidgetProviderInfo): Pair<Int, Int> =
+        resolveWidgetSizeDp(info, resources.displayMetrics.density)
 
     private fun sizeOptionsBundle(minWdp: Int, minHdp: Int): Bundle = Bundle().apply {
         putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, minWdp)
@@ -115,8 +134,10 @@ class LockScreenActivity : ComponentActivity() {
         putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, minHdp)
     }
 
-    private fun onProviderSelected(info: AppWidgetProviderInfo) {
+    private fun onProviderSelected(info: AppWidgetProviderInfo, preferredOffset: Offset) {
         val appWidgetId = appWidgetHost.allocateAppWidgetId()
+        pendingOffsetsByWidgetId[appWidgetId] = preferredOffset
+        pendingComponentsByWidgetId[appWidgetId] = info.provider.flattenToShortString()
         val (minWdp, minHdp) = resolveWidgetSizeDp(info)
         val options = sizeOptionsBundle(minWdp, minHdp)
 
@@ -135,16 +156,18 @@ class LockScreenActivity : ComponentActivity() {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_OPTIONS, options)
         }
         try {
+            inFlightWidgetId = appWidgetId
             bindWidgetLauncher.launch(bindIntent)
         } catch (_: ActivityNotFoundException) {
+            inFlightWidgetId = -1
             Toast.makeText(this, "위젯 바인딩을 처리할 수 없습니다", Toast.LENGTH_SHORT).show()
-            appWidgetHost.deleteAppWidgetId(appWidgetId)
+            cancelPending(appWidgetId)
         }
     }
 
     private fun configureOrAdd(appWidgetId: Int) {
         val info = appWidgetManager.getAppWidgetInfo(appWidgetId) ?: run {
-            appWidgetHost.deleteAppWidgetId(appWidgetId); return
+            cancelPending(appWidgetId); return
         }
         val configure = info.configure
         if (configure == null) {
@@ -156,8 +179,10 @@ class LockScreenActivity : ComponentActivity() {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
         }
         try {
+            inFlightWidgetId = appWidgetId
             configureWidgetLauncher.launch(configureIntent)
         } catch (_: Exception) {
+            inFlightWidgetId = -1
             addHostedWidget(appWidgetId)
         }
     }
@@ -168,6 +193,8 @@ class LockScreenActivity : ComponentActivity() {
         val options = sizeOptionsBundle(minWdp, minHdp)
         try { appWidgetManager.updateAppWidgetOptions(appWidgetId, options) } catch (_: Exception) {}
         val d = resources.displayMetrics.density
+        val preferredOffset = pendingOffsetsByWidgetId.remove(appWidgetId) ?: Offset(200f, 600f)
+        pendingComponentsByWidgetId.remove(appWidgetId)
         hostedWidgets.add(
             HostedAppWidget(
                 uid = "hosted_${appWidgetId}_${System.currentTimeMillis()}",
@@ -175,9 +202,16 @@ class LockScreenActivity : ComponentActivity() {
                 providerInfo = info,
                 widthPx = (minWdp * d).toInt(),
                 heightPx = (minHdp * d).toInt(),
-                offset = Offset(200f, 600f),
+                offset = preferredOffset,
             ),
         )
+    }
+
+    // 바인딩/설정 취소 시 위젯 ID 정리 + 소비됐던 추천 ghost 복원 신호
+    private fun cancelPending(appWidgetId: Int) {
+        pendingComponentsByWidgetId.remove(appWidgetId)?.let { cancelledComponents.add(it) }
+        pendingOffsetsByWidgetId.remove(appWidgetId)
+        appWidgetHost.deleteAppWidgetId(appWidgetId)
     }
 
     private fun removeHosted(uid: String) {
