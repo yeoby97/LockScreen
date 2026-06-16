@@ -81,7 +81,10 @@ object GeminiClient {
                 당신은 사용자의 의도를 꿰뚫어 보는 잠금화면 위젯 큐레이터입니다.
                 사용자 요구: "${userQuery.trim()}"
 
-                먼저 사용자가 "그 상황에서 실제로 보내는 시간"을 머릿속에 그려보세요.
+                이 단계는 "후보 추리기"입니다. 최종 선별이 아니라, 다음 단계에서
+                고를 수 있도록 관련 있는 후보를 넉넉히 통과시키는 게 목표입니다.
+
+                먼저 사용자가 "그 상황에서 실제로 보내는 시간"을 한 장면처럼 그려보세요.
                 요구 문장을 글자 그대로만 받지 말고, 그 행동에 자연스럽게 따라오는
                 준비·이동·기록·휴식·공유까지 하나의 흐름으로 상상하세요.
                 - 예) "운동 간다" → 헬스 앱만이 아니라 음악/플레이리스트, 타이머·스톱워치,
@@ -90,20 +93,23 @@ object GeminiClient {
                   쇼츠, 라이브 등 사람마다 다른 '재미'의 결을 폭넓게.
 
                 고를 때 원칙:
-                - 한 카테고리에 몰지 말고 서로 다른 결을 가진 항목을 섞어 폭을 넓히세요.
-                - 너무 뻔한 1순위 외에, "아 이것도 필요하지" 싶은 곁가지도 1~2개 넣으세요.
-                - 그래도 요구와 동떨어진 항목은 넣지 마세요. 폭은 넓히되 맥락은 지킵니다.
-                - 목록에 있는 id만 사용하세요.
+                - 후보는 넉넉하게(보통 8~15개) 남기세요. 애매하면 일단 통과시킵니다.
+                - 한 카테고리에 몰지 말고 서로 다른 결을 가진 항목을 골고루 섞으세요.
+                - 뻔한 1순위 외에, "아 이것도 있으면 좋지" 싶은 곁가지를 적극적으로 포함.
+                - 단, 맥락과 완전히 동떨어진 항목은 제외합니다.
+                - 목록에 실제로 있는 id만 사용하세요.
 
+                먼저 intent에 "사용자가 진짜 하려는 것"을 짧게 한 줄로 적고,
+                그 의도를 기준으로 selected를 채우세요.
                 반드시 JSON으로만 응답하세요. 다른 설명 없이 JSON만.
 
                 응답 스키마:
-                {"selected": ["<id>", "<id>", ...]}
+                {"intent": "<사용자 의도 한 줄>", "selected": ["<id>", "<id>", ...]}
 
                 항목 목록:
                 $listText
             """.trimIndent()
-            val raw = callGemini(prompt)
+            val raw = callGemini(prompt, temperature = 0.85)
             parseSelectedIds(raw)
         }
 
@@ -148,10 +154,13 @@ object GeminiClient {
             - 단, 폭은 넓히되 맥락은 지킵니다. 요구와 동떨어진 항목은 넣지 마세요.
             - 각 영역의 후보 목록에 실제로 있는 id만 사용하세요.
 
+            먼저 intent에 "사용자가 진짜 하려는 것"을 짧게 한 줄로 적고,
+            그 의도를 기준으로 각 영역을 채우세요.
             반드시 JSON으로만 응답하세요. 다른 설명 없이 JSON만.
 
             응답 스키마:
             {
+              "intent": "<사용자 의도 한 줄>",
               "tray": ["<mock lockwidget id>", ...],
               "floating": ["<real widget component>", ...],
               "left": "<shortcut id 또는 null>",
@@ -167,7 +176,7 @@ object GeminiClient {
             [바로가기 후보]
             $shortcutText
         """.trimIndent()
-        val raw = callGemini(prompt)
+        val raw = callGemini(prompt, temperature = 0.85)
         parseRecommendation(raw)
     }
 
@@ -484,7 +493,7 @@ object GeminiClient {
         else -> "9:16"
     }
 
-    private fun callGemini(prompt: String): String {
+    private fun callGemini(prompt: String, temperature: Double = 0.4): String {
         if (API_KEY.isBlank() || API_KEY == "YOUR_GEMINI_API_KEY") {
             throw LlmException("Gemini API 키가 설정되지 않았습니다. GeminiClient.API_KEY를 채워주세요.")
         }
@@ -495,7 +504,7 @@ object GeminiClient {
                 ))
             ))
             put("generationConfig", JSONObject().apply {
-                put("temperature", 0.4)
+                put("temperature", temperature)
                 put("responseMimeType", "application/json")
             })
         }
