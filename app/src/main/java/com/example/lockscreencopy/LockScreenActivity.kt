@@ -3,12 +3,16 @@ package com.example.lockscreencopy
 import android.app.Activity
 import android.app.KeyguardManager
 import android.appwidget.AppWidgetHost
+import android.appwidget.AppWidgetHostView
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
+import android.view.View
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -68,7 +72,7 @@ class LockScreenActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         keyguardManager = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
         appWidgetManager = AppWidgetManager.getInstance(this)
-        appWidgetHost = AppWidgetHost(this, HOST_ID)
+        appWidgetHost = LoggingAppWidgetHost(this, HOST_ID)
         setShowWhenLocked(true)
         setTurnScreenOn(true)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -124,7 +128,11 @@ class LockScreenActivity : ComponentActivity() {
 
         val bound = try {
             appWidgetManager.bindAppWidgetIdIfAllowed(appWidgetId, info.provider, options)
-        } catch (_: Exception) { false }
+        } catch (e: Exception) {
+            Log.e(WIDGET_TAG, "bind 예외 provider=${info.provider.flattenToShortString()}", e)
+            false
+        }
+        Log.d(WIDGET_TAG, "bindAppWidgetIdIfAllowed=$bound provider=${info.provider.flattenToShortString()}")
 
         if (bound) {
             configureOrAdd(appWidgetId)
@@ -170,6 +178,10 @@ class LockScreenActivity : ComponentActivity() {
 
     private fun addHostedWidget(appWidgetId: Int) {
         val info = appWidgetManager.getAppWidgetInfo(appWidgetId) ?: return
+        Log.d(
+            WIDGET_TAG,
+            "위젯 추가됨 id=$appWidgetId provider=${info.provider.flattenToShortString()} configure=${info.configure}",
+        )
         val (minWdp, minHdp) = resolveWidgetSizeDp(info)
         val options = sizeOptionsBundle(minWdp, minHdp)
         try { appWidgetManager.updateAppWidgetOptions(appWidgetId, options) } catch (_: Exception) {}
@@ -202,4 +214,35 @@ class LockScreenActivity : ComponentActivity() {
     }
 
     companion object { const val HOST_ID = 1024 }
+}
+
+private const val WIDGET_TAG = "WidgetDebug"
+
+/**
+ * 위젯 렌더링 디버그용 호스트.
+ * 위젯 뷰를 만들 때, 그리고 RemoteViews 적용이 실패해 에러 뷰가 뜰 때를 로그로 남긴다.
+ */
+private class LoggingAppWidgetHost(context: Context, hostId: Int) :
+    AppWidgetHost(context, hostId) {
+    override fun onCreateView(
+        context: Context,
+        appWidgetId: Int,
+        appWidget: AppWidgetProviderInfo?,
+    ): AppWidgetHostView {
+        Log.d(
+            WIDGET_TAG,
+            "createView id=$appWidgetId provider=${appWidget?.provider?.flattenToShortString()}",
+        )
+        return LoggingAppWidgetHostView(context)
+    }
+}
+
+private class LoggingAppWidgetHostView(context: Context) : AppWidgetHostView(context) {
+    // RemoteViews 적용이 실패하면 시스템이 이 에러 뷰를 띄운다(= 화면의 "콘텐츠를 표시할 수 없음").
+    // 이 로그가 찍히면 '바인딩은 됐지만 렌더 단계에서 실패'한 것이다.
+    // 실제 예외 원인은 logcat 의 AppWidgetHostView / RemoteViews 태그에서 확인한다.
+    override fun getErrorView(): View {
+        Log.e(WIDGET_TAG, "⚠️ 렌더 실패 id=$appWidgetId → RemoteViews 적용 실패(콘텐츠 표시 불가)")
+        return super.getErrorView()
+    }
 }
