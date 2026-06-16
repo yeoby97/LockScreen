@@ -102,7 +102,7 @@ fun LlmLayoutSheet(
                 modifier = Modifier.padding(vertical = 12.dp),
             )
             Text(
-                "원하는 상황을 자유롭게 적어주세요. (예: \"운동할 때 필요한 거 배치해줘\")",
+                "원하는 상황을 자유롭게 적어주세요.",
                 color = Color(0xFFB0B0B5), fontSize = 13.sp,
             )
             Spacer(Modifier.height(12.dp))
