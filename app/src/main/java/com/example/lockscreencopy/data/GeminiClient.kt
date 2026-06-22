@@ -1,5 +1,6 @@
 package com.example.lockscreencopy.data
 
+import com.example.lockscreencopy.BuildConfig
 import com.example.lockscreencopy.model.BottomShortcut
 import com.example.lockscreencopy.model.LockWidget
 import com.example.lockscreencopy.model.WidgetSize
@@ -23,8 +24,7 @@ data class LlmRecommendation(
 )
 
 object GeminiClient {
-    // TODO: 실제 키로 교체하세요. (현재는 임시 하드코딩 상수)
-    private const val API_KEY: String = "AIzaSyBbCkbIIb__lKf1FYfuozm_ks7PVhHi1B4"
+    private val API_KEY: String get() = BuildConfig.GEMINI_API_KEY
     private const val MODEL = "gemini-3-flash-preview"
     private const val ENDPOINT =
         "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent"
@@ -107,7 +107,7 @@ object GeminiClient {
 
     private fun callGemini(prompt: String): String {
         if (API_KEY.isBlank() || API_KEY == "YOUR_GEMINI_API_KEY") {
-            throw LlmException("Gemini API 키가 설정되지 않았습니다. GeminiClient.API_KEY를 채워주세요.")
+            throw LlmException("Gemini API 키가 설정되지 않았습니다. local.properties에 GEMINI_API_KEY=<키> 를 추가하고 다시 빌드하세요.")
         }
         val body = JSONObject().apply {
             put("contents", JSONArray().put(
